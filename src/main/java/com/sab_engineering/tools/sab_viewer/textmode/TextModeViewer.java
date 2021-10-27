@@ -5,6 +5,8 @@ import com.sab_engineering.tools.sab_viewer.io.LineStatistics;
 import com.sab_engineering.tools.sab_viewer.io.Reader;
 import com.sab_engineering.tools.sab_viewer.io.Scanner;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.Vector;
 
@@ -16,10 +18,18 @@ public class TextModeViewer {
     private static final List<LineContent> LINE_CONTENTS = new Vector<>(); // synchronized vector is useful after all
     private static final List<LineStatistics> LINE_STATISTICS = new Vector<>();
 
+    private static IOException scannerException = null;
+
     @SuppressWarnings("BusyWait")
     public static void view(String fileName) {
         Thread scannerThread = new Thread(
-                () -> Scanner.scanFile(fileName, TextModeViewer::offer, COLUMNS, LINE_STATISTICS::add),
+                () -> {
+                    try {
+                        Scanner.scanFile(fileName, TextModeViewer::offer, COLUMNS, LINE_STATISTICS::add);
+                    } catch (IOException ioException) {
+                        scannerException = ioException;
+                    }
+                },
                 "Scanner"
         );
         scannerThread.start();
@@ -39,18 +49,26 @@ public class TextModeViewer {
             }
         }
 
-        if (LINE_STATISTICS.size() > ROWS) {
-            List<LineContent> lineContents = Reader.readSpecificLines(fileName, LINE_STATISTICS.subList(LINE_STATISTICS.size() / 2 - 5, LINE_STATISTICS.size() / 2 + 5), 10, COLUMNS);
-            System.out.println("=============Middle lines, starting from column 10 =============");
-            for (LineContent lineContent : lineContents) {
-                System.out.println(lineContent.getVisibleContent());
-            }
+        if (scannerException != null) {
+            throw new UncheckedIOException("Unable to scan file '" + fileName + "': " + scannerException.getClass().getSimpleName(), scannerException);
+        }
 
-            lineContents = Reader.readSpecificLines(fileName, LINE_STATISTICS.subList(LINE_STATISTICS.size() - 10, LINE_STATISTICS.size()), 0, COLUMNS);
-            System.out.println("=============Last lines=============");
-            for (LineContent lineContent : lineContents) {
-                System.out.println(lineContent.getVisibleContent());
+        try {
+            if (LINE_STATISTICS.size() > ROWS) {
+                List<LineContent> lineContents = Reader.readSpecificLines(fileName, LINE_STATISTICS.subList(LINE_STATISTICS.size() / 2 - 5, LINE_STATISTICS.size() / 2 + 5), 10, COLUMNS);
+                System.out.println("=============Middle lines, starting from column 10 =============");
+                for (LineContent lineContent : lineContents) {
+                    System.out.println(lineContent.getVisibleContent());
+                }
+
+                lineContents = Reader.readSpecificLines(fileName, LINE_STATISTICS.subList(LINE_STATISTICS.size() - 10, LINE_STATISTICS.size()), 0, COLUMNS);
+                System.out.println("=============Last lines=============");
+                for (LineContent lineContent : lineContents) {
+                    System.out.println(lineContent.getVisibleContent());
+                }
             }
+        } catch (IOException ioException) {
+            throw new UncheckedIOException("Unable to read file '" + fileName + "': " + ioException.getClass().getSimpleName(), ioException);
         }
 
         System.out.println("File " + fileName + " contained " + LINE_STATISTICS.size() + " lines with " + LINE_STATISTICS.stream().mapToLong(LineStatistics::getLength).sum() + " characters (excluding new line characters)");

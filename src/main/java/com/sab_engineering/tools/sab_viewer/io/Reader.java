@@ -12,7 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Reader {
-    public static List<LineContent> readSpecificLines(String fileName, List<LineStatistics> linesToReadOrderedByStartPositionInFile, int offsetFromBeginningOfLine, int numberOfVisibleCharactersPerLine) {
+    public static List<LineContent> readSpecificLines(String fileName, List<LineStatistics> linesToReadOrderedByStartPositionInFile, int offsetFromBeginningOfLine, int numberOfVisibleCharactersPerLine) throws IOException {
         if (offsetFromBeginningOfLine < 0) {
             throw new IllegalStateException("Negative offsets are not supported: " + offsetFromBeginningOfLine);
         }
@@ -50,8 +50,6 @@ public class Reader {
                 }
             }
             return resultingLines;
-        } catch (IOException e) {
-            throw new UncheckedIOException("Unable to read '" + fileName + "'", e);
         }
     }
 }
