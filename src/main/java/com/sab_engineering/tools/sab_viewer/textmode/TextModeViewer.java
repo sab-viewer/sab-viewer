@@ -8,11 +8,12 @@ import com.sab_engineering.tools.sab_viewer.io.Scanner;
 import java.util.List;
 import java.util.Vector;
 
+// this just some simple demo for the scanner to show and test the components a real GUI would need
 public class TextModeViewer {
     private final static int ROWS = 40;
     private final static int COLUMNS = 80;
 
-    private static final List<LineContent> LINE_CONTENTS = new Vector<>(); // stupid synchronized vector is useful after all
+    private static final List<LineContent> LINE_CONTENTS = new Vector<>(); // synchronized vector is useful after all
     private static final List<LineStatistics> LINE_STATISTICS = new Vector<>();
 
     @SuppressWarnings("BusyWait")
@@ -25,7 +26,7 @@ public class TextModeViewer {
 
         int printedSize = 0;
         while (scannerThread.isAlive() || printedSize < LINE_CONTENTS.size()) {
-            if (printedSize < LINE_CONTENTS.size()) {
+            while (printedSize < LINE_CONTENTS.size()) {
                 LineContent newLine = LINE_CONTENTS.get(printedSize);
                 printedSize += 1;
 
