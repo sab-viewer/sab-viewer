@@ -5,7 +5,6 @@ import com.sab_engineering.tools.sab_viewer.io.LineStatistics;
 import com.sab_engineering.tools.sab_viewer.io.Reader;
 import com.sab_engineering.tools.sab_viewer.io.Scanner;
 
-import java.util.Collections;
 import java.util.List;
 import java.util.Vector;
 
