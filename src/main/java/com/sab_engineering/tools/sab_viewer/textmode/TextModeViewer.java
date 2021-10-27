@@ -2,8 +2,10 @@ package com.sab_engineering.tools.sab_viewer.textmode;
 
 import com.sab_engineering.tools.sab_viewer.io.LineContent;
 import com.sab_engineering.tools.sab_viewer.io.LineStatistics;
+import com.sab_engineering.tools.sab_viewer.io.Reader;
 import com.sab_engineering.tools.sab_viewer.io.Scanner;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Vector;
 
@@ -36,6 +38,15 @@ public class TextModeViewer {
                 scannerThread.interrupt();
             }
         }
+
+        if (LINE_STATISTICS.size() > ROWS) {
+            List<LineContent> lineContents = Reader.readSpecificLines(fileName, LINE_STATISTICS.subList(LINE_STATISTICS.size() - 10, LINE_STATISTICS.size()), COLUMNS);
+            System.out.println("=============Last lines=============");
+            for (LineContent lineContent : lineContents) {
+                System.out.println(lineContent.getVisibleContent());
+            }
+        }
+
         System.out.println("File " + fileName + " contained " + LINE_STATISTICS.size() + " lines with " + LINE_STATISTICS.stream().mapToLong(LineStatistics::getLength).sum() + " characters (excluding new line characters)");
     }
 
