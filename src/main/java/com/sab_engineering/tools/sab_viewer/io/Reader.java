@@ -12,7 +12,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Reader {
-    public static List<LineContent> readSpecificLines(String fileName, List<LineStatistics> linesToReadOrderedByStartPositionInFile, int numberOfVisibleCharactersPerLine) {
+    public static List<LineContent> readSpecificLines(String fileName, List<LineStatistics> linesToReadOrderedByStartPositionInFile, int offsetFromBeginningOfLine, int numberOfVisibleCharactersPerLine) {
+        if (offsetFromBeginningOfLine < 0) {
+            throw new IllegalStateException("Negative offsets are not supported: " + offsetFromBeginningOfLine);
+        }
         try (
                 InputStream inputStream = Files.newInputStream(Paths.get(fileName), StandardOpenOption.READ);
                 InputStreamReader inputReader = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
@@ -25,14 +28,26 @@ public class Reader {
                 if (lastPosition != lineStatistics.getStartPositionInFile()) {
                     throw new IllegalStateException("File content changed unexpectedly while reading it");
                 }
-                int charactersToRead = (int) Math.min(numberOfVisibleCharactersPerLine, lineStatistics.getLength());
-                char[] lineBuffer = new char[charactersToRead];
-                int charactersRead = inputReader.read(lineBuffer);
-                lastPosition += charactersRead;
-                if (charactersRead != charactersToRead) {
+
+                long offsetToApply = Math.min(offsetFromBeginningOfLine, lineStatistics.getLength());
+                skippedCharacters = inputReader.skip(offsetToApply);
+                lastPosition += skippedCharacters;
+                if (lastPosition != lineStatistics.getStartPositionInFile() + offsetToApply) {
                     throw new IllegalStateException("File content changed unexpectedly while reading it");
                 }
-                resultingLines.add(new LineContent(new String(lineBuffer)));
+
+                int charactersToRead = (int) Math.min(numberOfVisibleCharactersPerLine, lineStatistics.getLength() - offsetToApply);
+                if (charactersToRead > 0) {
+                    char[] lineBuffer = new char[charactersToRead];
+                    int charactersRead = inputReader.read(lineBuffer);
+                    lastPosition += charactersRead;
+                    if (charactersRead != charactersToRead) {
+                        throw new IllegalStateException("File content changed unexpectedly while reading it");
+                    }
+                    resultingLines.add(new LineContent(new String(lineBuffer)));
+                } else {
+                    resultingLines.add(new LineContent(""));
+                }
             }
             return resultingLines;
         } catch (IOException e) {
