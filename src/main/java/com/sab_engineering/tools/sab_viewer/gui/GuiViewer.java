@@ -16,6 +16,8 @@ import java.awt.BorderLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeListener;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.Vector;
 
@@ -37,6 +39,8 @@ public class GuiViewer {
     private int consumedLinesCount = 0;
     private final List<LineStatistics> lineStatistics = new Vector<>();
 
+    private IOException scannerException = null;
+
     public GuiViewer(final String fileName) {
         this.fileName = fileName;
     }
@@ -44,10 +48,25 @@ public class GuiViewer {
     public void show() {
         prepareGui();
         Thread scannerThread = new Thread(
-                () -> Scanner.scanFile(fileName, this::consumeLine, maxColumns, lineStatistics::add),
+                () -> {
+                    try {
+                        Scanner.scanFile(fileName, this::consumeLine, maxColumns, lineStatistics::add);
+                    } catch (IOException ioException) {
+                        scannerException = ioException;
+                    }
+                },
                 "Scanner"
         );
         scannerThread.start();
+        try {
+            scannerThread.join();
+        } catch (InterruptedException e) {
+           scannerThread.interrupt();
+        }
+
+        if (scannerException != null) {
+            throw new UncheckedIOException("Unable to scan file '" + fileName + "': " + scannerException.getClass().getSimpleName(), scannerException);
+        }
     }
 
     public void update() {
@@ -62,7 +81,12 @@ public class GuiViewer {
             firstDisplayedLineIndex = lineStatistics.size() - 1;
         }
         final int oneAfterLastLineIndex = Math.min(lineStatistics.size(), firstDisplayedLineIndex + maxRows);
-        final List<LineContent> lineContents = Reader.readSpecificLines(fileName, lineStatistics.subList(firstDisplayedLineIndex, oneAfterLastLineIndex), maxColumns);
+        final List<LineContent> lineContents;
+        try {
+            lineContents = Reader.readSpecificLines(fileName, lineStatistics.subList(firstDisplayedLineIndex, oneAfterLastLineIndex), 0, maxColumns);
+        } catch (IOException ioException) {
+            throw new UncheckedIOException("Unable to read file '" + fileName + "': " + ioException.getClass().getSimpleName(), ioException);
+        }
         final StringBuilder text = new StringBuilder();
         for (LineContent lineContent : lineContents) {
             text.append(lineContent.getVisibleContent()).append("\n");
