@@ -51,6 +51,7 @@ public class GuiViewer {
                     try {
                         Scanner.scanFile(fileName, this::addInitialContent, maxColumns, this::addLineStatistics);
                     } catch (IOException ioException) {
+                        clearInitialContent();
                         scannerException = ioException;
                     }
                 },
@@ -131,32 +132,34 @@ public class GuiViewer {
 
     // prevent further updates by scanner
     private void clearInitialContent() {
-        try {
-            initialContentLock.acquire();
+        if (initialContent != null) {
             try {
-                initialContent = null;
-            } finally {
-                initialContentLock.release();
+                initialContentLock.acquire();
+                try {
+                    initialContent = null;
+                } finally {
+                    initialContentLock.release();
+                }
+            } catch (InterruptedException e) {
+                throw new IllegalStateException("Unable to get content lock", e);
             }
-        } catch (InterruptedException e) {
-            throw new IllegalStateException("Unable to get content lock", e);
         }
     }
 
     private void addInitialContent(LineContent lineContent) {
-        try {
-            if (initialContent != null) {
-                initialContentLock.acquire();
-                try {
-                    if (initialContent != null && initialContent.size() < maxRows) {
-                        initialContent.add(lineContent);
+        if (initialContent != null) {
+            try {
+                    initialContentLock.acquire();
+                    try {
+                        if (initialContent != null && initialContent.size() < maxRows) {
+                            initialContent.add(lineContent);
+                        }
+                    } finally {
+                        initialContentLock.release();
                     }
-                } finally {
-                    initialContentLock.release();
-                }
+            } catch (InterruptedException e) {
+                throw new IllegalStateException("Unable to get content lock", e);
             }
-        } catch (InterruptedException e) {
-            throw new IllegalStateException("Unable to get content lock", e);
         }
     }
 

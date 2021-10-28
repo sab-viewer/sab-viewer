@@ -3,7 +3,6 @@ package com.sab_engineering.tools.sab_viewer.io;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -16,6 +15,7 @@ public class Reader {
         if (offsetFromBeginningOfLine < 0) {
             throw new IllegalStateException("Negative offsets are not supported: " + offsetFromBeginningOfLine);
         }
+        System.out.println(System.currentTimeMillis() + " read starts");
         try (
                 InputStream inputStream = Files.newInputStream(Paths.get(fileName), StandardOpenOption.READ);
                 InputStreamReader inputReader = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
@@ -49,6 +49,7 @@ public class Reader {
                     resultingLines.add(new LineContent(""));
                 }
             }
+            System.out.println(System.currentTimeMillis() + " read ends");
             return resultingLines;
         }
     }
