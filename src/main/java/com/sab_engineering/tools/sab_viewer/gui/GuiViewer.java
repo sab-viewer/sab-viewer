@@ -6,7 +6,7 @@ import com.sab_engineering.tools.sab_viewer.io.Reader;
 import com.sab_engineering.tools.sab_viewer.io.Scanner;
 
 import javax.swing.*;
-import java.awt.BorderLayout;
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeListener;
@@ -22,7 +22,8 @@ public class GuiViewer {
     private int maxRows = 40; // TODO: This should be changed on window resize
     private int maxColumns = 120;
 
-    private int firstDisplayedLineIndex = 0; // index in lineStatistics
+    private int firstDisplayedLineIndex; // index in lineStatistics
+    private int lineOffset; // vertical scrolling
 
     private JFrame frame;
     private JTextArea textArea;
@@ -36,6 +37,8 @@ public class GuiViewer {
 
     public GuiViewer(final String fileName) {
         this.fileName = fileName;
+        firstDisplayedLineIndex = 0;
+        lineOffset = 0;
         initialContentLock = new Semaphore(1);
         initialContent = new ArrayList<>(maxRows);
         lineStatisticsLock = new Semaphore(1);
@@ -113,16 +116,18 @@ public class GuiViewer {
 
         final List<LineContent> lineContents;
         try {
-            lineContents = Reader.readSpecificLines(fileName, linesToRead, 0, maxColumns);
+            lineContents = Reader.readSpecificLines(fileName, linesToRead, lineOffset, maxColumns);
         } catch (IOException ioException) {
             throw displayAndCreateException(ioException, "read");
         }
+        boolean lineAppended = false;
         final StringBuilder text = new StringBuilder();
         for (LineContent lineContent : lineContents) {
-            if (text.length() > 0) {
+            if (lineAppended) {
                 text.append("\n");
             }
             text.append(lineContent.getVisibleContent());
+            lineAppended = true;
         }
         textArea.setText(text.toString());
     }
@@ -181,6 +186,18 @@ public class GuiViewer {
         update();
     }
 
+    private void moveRight() {
+        lineOffset++;
+        update();
+    }
+
+    private void moveLeft() {
+        if (lineOffset > 0) {
+            lineOffset--;
+        }
+        update();
+    }
+
     private void prepareGui() {
         frame = new JFrame("SAB-Viewer");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -194,9 +211,12 @@ public class GuiViewer {
 
         textArea = new JTextArea();
         textArea.setEditable(false);
+        textArea.setFont(Font.decode(Font.MONOSPACED));
 
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0), "up");
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0), "down");
+        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0), "left");
+        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), "right");
         textArea.getActionMap().put("up", new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
@@ -207,6 +227,18 @@ public class GuiViewer {
             @Override
             public void actionPerformed(ActionEvent e) {
                 moveDown();
+            }
+        });
+        textArea.getActionMap().put("left", new ActionStub() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                moveLeft();
+            }
+        });
+        textArea.getActionMap().put("right", new ActionStub() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                moveRight();
             }
         });
 
