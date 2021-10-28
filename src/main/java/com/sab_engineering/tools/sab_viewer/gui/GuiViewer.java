@@ -19,8 +19,8 @@ import java.util.concurrent.Semaphore;
 public class GuiViewer {
     private final String fileName;
 
-    private int maxRows = 40; // TODO: This should be changed on window resize
-    private int maxColumns = 120;
+    private int maxRows = 50; // TODO: This should be changed on window resize
+    private int maxColumns = 150;
 
     private int firstDisplayedLineIndex; // index in lineStatistics
     private int lineOffset; // vertical scrolling
@@ -99,9 +99,6 @@ public class GuiViewer {
                 if (lineStatistics.isEmpty()) {
                     return;
                 }
-                if (firstDisplayedLineIndex < 0) {
-                    firstDisplayedLineIndex = 0;
-                }
                 if (firstDisplayedLineIndex >= lineStatistics.size()) {
                     firstDisplayedLineIndex = lineStatistics.size() - 1;
                 }
@@ -176,24 +173,18 @@ public class GuiViewer {
         }
     }
 
-    private void moveDown() {
-        firstDisplayedLineIndex++;
+    private void moveVertical(int offset) {
+        firstDisplayedLineIndex += offset;
+        if (firstDisplayedLineIndex < 0) {
+            firstDisplayedLineIndex = 0;
+        }
         update();
     }
 
-    private void moveUp() {
-        firstDisplayedLineIndex--;
-        update();
-    }
-
-    private void moveRight() {
-        lineOffset++;
-        update();
-    }
-
-    private void moveLeft() {
-        if (lineOffset > 0) {
-            lineOffset--;
+    private void moveHorizontal(int offset) {
+        lineOffset += offset;
+        if (lineOffset < 0) {
+            lineOffset = 0;
         }
         update();
     }
@@ -201,7 +192,7 @@ public class GuiViewer {
     private void prepareGui() {
         frame = new JFrame("SAB-Viewer");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(800, 400); // TODO: This we need to calculate based on geometry and font size
+        frame.setSize(1000, 800); // TODO: This we need to calculate based on geometry and font size
 
         JMenuBar menuBar = new JMenuBar();
         JMenu fileMenu = new JMenu("File");
@@ -214,31 +205,45 @@ public class GuiViewer {
         textArea.setFont(Font.decode(Font.MONOSPACED));
 
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0), "up");
+        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_UP, 0), "upPage");
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0), "down");
+        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_DOWN, 0), "downPage");
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0), "left");
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), "right");
         textArea.getActionMap().put("up", new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                moveUp();
+                moveVertical(-1);
+            }
+        });
+        textArea.getActionMap().put("upPage", new ActionStub() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                moveVertical((maxRows - 1) * -1);
             }
         });
         textArea.getActionMap().put("down", new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                moveDown();
+                moveVertical(1);
+            }
+        });
+        textArea.getActionMap().put("downPage", new ActionStub() {
+            @Override
+            public void actionPerformed(ActionEvent e) {
+                moveVertical((maxRows - 1));
             }
         });
         textArea.getActionMap().put("left", new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                moveLeft();
+                moveHorizontal(-1);
             }
         });
         textArea.getActionMap().put("right", new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                moveRight();
+                moveHorizontal(1);
             }
         });
 

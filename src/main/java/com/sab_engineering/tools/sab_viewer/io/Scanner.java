@@ -3,7 +3,6 @@ package com.sab_engineering.tools.sab_viewer.io;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
@@ -44,7 +43,9 @@ public class Scanner {
             } while (charsRead != -1);
 
             if (positionInLine > 0) {
-                lineListener.accept(new LineContent(new String(lineBuffer, 0, positionInLine)));
+                if (positionInLine <= numberOfVisibleCharactersPerLine) {
+                    lineListener.accept(new LineContent(new String(lineBuffer, 0, positionInLine)));
+                }
                 statisticsListener.accept(new LineStatistics(positionOfLastNewLineStart, positionInLine));
             }
         }
