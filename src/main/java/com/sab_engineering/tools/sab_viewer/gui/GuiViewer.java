@@ -19,8 +19,8 @@ import java.util.concurrent.Semaphore;
 public class GuiViewer {
     private final String fileName;
 
-    private int maxRows = 20; // TODO: This should be changed on window resize
-    private int maxColumns = 40;
+    private int maxRows = 40; // TODO: This should be changed on window resize
+    private int maxColumns = 120;
 
     private int firstDisplayedLineIndex = 0; // index in lineStatistics
 
@@ -184,7 +184,7 @@ public class GuiViewer {
     private void prepareGui() {
         frame = new JFrame("SAB-Viewer");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(400, 400); // TODO: This we need to calculate based on geometry and font size
+        frame.setSize(800, 400); // TODO: This we need to calculate based on geometry and font size
 
         JMenuBar menuBar = new JMenuBar();
         JMenu fileMenu = new JMenu("File");
