@@ -22,12 +22,6 @@ import java.util.List;
 import java.util.Vector;
 
 public class GuiViewer {
-
-    // TODO: Remove this and use main entry point instead (control with command line options or so).
-    public static void main(String[] args) {
-        new GuiViewer(args[0]).show();
-    }
-
     private final String fileName;
 
     private int maxRows = 20; // TODO: This should be changed on window resize
