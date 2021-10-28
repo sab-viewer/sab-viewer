@@ -13,7 +13,7 @@ import java.util.function.Consumer;
 public class Scanner {
     private static final int BUFFER_SIZE = 4096;
 
-    public static void scanFile(String fileName, Consumer<LineContent> lineListener, int numberOfVisibleCharactersPerLine, Consumer<LineStatistics> statisticsListener) {
+    public static void scanFile(String fileName, Consumer<LineContent> lineListener, int numberOfVisibleCharactersPerLine, Consumer<LineStatistics> statisticsListener) throws IOException {
         try (
                 InputStream inputStream = Files.newInputStream(Paths.get(fileName), StandardOpenOption.READ);
                 InputStreamReader inputReader = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
@@ -47,9 +47,6 @@ public class Scanner {
                 lineListener.accept(new LineContent(new String(lineBuffer, 0, positionInLine)));
                 statisticsListener.accept(new LineStatistics(positionOfLastNewLineStart, positionInLine));
             }
-
-        } catch (IOException e) {
-            throw new UncheckedIOException("Unable to read '" + fileName + "'", e);
         }
     }
 }
