@@ -12,8 +12,9 @@ import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeListener;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.util.ArrayList;
 import java.util.List;
-import java.util.Vector;
+import java.util.concurrent.Semaphore;
 
 public class GuiViewer {
     private final String fileName;
@@ -26,22 +27,26 @@ public class GuiViewer {
     private JFrame frame;
     private JTextArea textArea;
 
+    private final Semaphore initialContentLock;
     private List<LineContent> initialContent;
+    private final Semaphore lineStatisticsLock;
     private final List<LineStatistics> lineStatistics;
 
     private IOException scannerException = null;
 
     public GuiViewer(final String fileName) {
         this.fileName = fileName;
-        lineStatistics = new Vector<>(100000);
-        initialContent = new Vector<>(maxRows);
+        initialContentLock = new Semaphore(1);
+        initialContent = new ArrayList<>(maxRows);
+        lineStatisticsLock = new Semaphore(1);
+        lineStatistics = new ArrayList<>(100000);
     }
 
     public void show() {
         Thread scannerThread = new Thread(
                 () -> {
                     try {
-                        Scanner.scanFile(fileName, this::consumeLine, maxColumns, lineStatistics::add);
+                        Scanner.scanFile(fileName, this::addInitialContent, maxColumns, this::addLineStatistics);
                     } catch (IOException ioException) {
                         scannerException = ioException;
                     }
@@ -53,18 +58,22 @@ public class GuiViewer {
         prepareGui();
 
         int consumedLinesCount = 0;
-        while (scannerThread.isAlive() || (initialContent != null && consumedLinesCount < initialContent.size())) {
-            List<LineContent> content = this.initialContent;
-            while (content != null && consumedLinesCount < content.size()) {
-                LineContent newLine = content.get(consumedLinesCount);
-                consumedLinesCount += 1;
-
-                if (!textArea.getText().isEmpty()) {
-                    textArea.append("\n");
-                }
-                textArea.append(newLine.getVisibleContent());
-            }
+        while (scannerThread.isAlive() || (consumedLinesCount < maxRows && initialContent != null)) {
             try {
+                initialContentLock.acquire();
+                try {
+                    while (initialContent != null && consumedLinesCount < initialContent.size()) {
+                        LineContent newLine = initialContent.get(consumedLinesCount);
+                        consumedLinesCount += 1;
+
+                        if (!textArea.getText().isEmpty()) {
+                            textArea.append("\n");
+                        }
+                        textArea.append(newLine.getVisibleContent());
+                    }
+                } finally {
+                    initialContentLock.release();
+                }
                 //noinspection BusyWait
                 Thread.sleep(10);
             } catch (InterruptedException e) {
@@ -77,28 +86,34 @@ public class GuiViewer {
         }
     }
 
-    private UncheckedIOException displayAndCreateException(IOException exception, String verb)  {
-        String message = "Unable to " + verb + " file '" + fileName + "': " + exception.getClass().getSimpleName();
-        JOptionPane.showMessageDialog(frame, message, "Unable to " + verb + " file", JOptionPane.ERROR_MESSAGE);
-        return new UncheckedIOException(message, exception);
-    }
-
     public void update() {
-        initialContent = null; // prevent further updates by scanner
-        textArea.setText("");
-        if (lineStatistics.isEmpty()) {
-            return;
+        clearInitialContent();
+
+        List<LineStatistics> linesToRead;
+        try {
+            lineStatisticsLock.acquire();
+            try {
+                if (lineStatistics.isEmpty()) {
+                    return;
+                }
+                if (firstDisplayedLineIndex < 0) {
+                    firstDisplayedLineIndex = 0;
+                }
+                if (firstDisplayedLineIndex >= lineStatistics.size()) {
+                    firstDisplayedLineIndex = lineStatistics.size() - 1;
+                }
+                final int oneAfterLastLineIndex = Math.min(lineStatistics.size(), firstDisplayedLineIndex + maxRows);
+                linesToRead = new ArrayList<>(lineStatistics.subList(firstDisplayedLineIndex, oneAfterLastLineIndex));
+            } finally {
+                lineStatisticsLock.release();
+            }
+        } catch (InterruptedException e) {
+            throw new IllegalStateException("Unable to get statistics lock", e);
         }
-        if (firstDisplayedLineIndex < 0) {
-            firstDisplayedLineIndex = 0;
-        }
-        if (firstDisplayedLineIndex >= lineStatistics.size()) {
-            firstDisplayedLineIndex = lineStatistics.size() - 1;
-        }
-        final int oneAfterLastLineIndex = Math.min(lineStatistics.size(), firstDisplayedLineIndex + maxRows);
+
         final List<LineContent> lineContents;
         try {
-            lineContents = Reader.readSpecificLines(fileName, lineStatistics.subList(firstDisplayedLineIndex, oneAfterLastLineIndex), 0, maxColumns);
+            lineContents = Reader.readSpecificLines(fileName, linesToRead, 0, maxColumns);
         } catch (IOException ioException) {
             throw displayAndCreateException(ioException, "read");
         }
@@ -112,10 +127,47 @@ public class GuiViewer {
         textArea.setText(text.toString());
     }
 
-    private void consumeLine(LineContent lineContent) {
-        List<LineContent> content = this.initialContent;
-        if (content != null && content.size() < maxRows) {
-            content.add(lineContent);
+    // prevent further updates by scanner
+    private void clearInitialContent() {
+        try {
+            initialContentLock.acquire();
+            try {
+                initialContent = null;
+            } finally {
+                initialContentLock.release();
+            }
+        } catch (InterruptedException e) {
+            throw new IllegalStateException("Unable to get content lock", e);
+        }
+    }
+
+    private void addInitialContent(LineContent lineContent) {
+        try {
+            if (initialContent != null) {
+                initialContentLock.acquire();
+                try {
+                    if (initialContent != null && initialContent.size() < maxRows) {
+                        initialContent.add(lineContent);
+                    }
+                } finally {
+                    initialContentLock.release();
+                }
+            }
+        } catch (InterruptedException e) {
+            throw new IllegalStateException("Unable to get content lock", e);
+        }
+    }
+
+    private void addLineStatistics(LineStatistics statistics) {
+        try {
+            lineStatisticsLock.acquire();
+            try {
+                lineStatistics.add(statistics);
+            } finally {
+                lineStatisticsLock.release();
+            }
+        } catch (InterruptedException e) {
+            throw new IllegalStateException("Unable to get statistics lock", e);
         }
     }
 
@@ -141,6 +193,7 @@ public class GuiViewer {
         fileMenu.add(openMenuItem);
 
         textArea = new JTextArea();
+        textArea.setEditable(false);
 
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0), "up");
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0), "down");
@@ -160,6 +213,12 @@ public class GuiViewer {
         frame.getContentPane().add(BorderLayout.NORTH, menuBar);
         frame.getContentPane().add(BorderLayout.CENTER, textArea);
         frame.setVisible(true);
+    }
+
+    private UncheckedIOException displayAndCreateException(IOException exception, String verb)  {
+        String message = "Unable to " + verb + " file '" + fileName + "': " + exception.getClass().getSimpleName();
+        JOptionPane.showMessageDialog(frame, message, "Unable to " + verb + " file", JOptionPane.ERROR_MESSAGE);
+        return new UncheckedIOException(message, exception);
     }
 
     private static abstract class ActionStub implements Action {
