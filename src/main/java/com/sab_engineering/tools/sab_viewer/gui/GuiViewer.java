@@ -33,8 +33,8 @@ public class GuiViewer {
 
     public GuiViewer(final String fileName) {
         this.fileName = fileName;
-        lineStatistics = new Vector<>();
-        initialContent = new Vector<>();
+        lineStatistics = new Vector<>(100000);
+        initialContent = new Vector<>(maxRows);
     }
 
     public void show() {

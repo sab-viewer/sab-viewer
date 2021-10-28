@@ -15,8 +15,8 @@ public class TextModeViewer {
     private final static int ROWS = 40;
     private final static int COLUMNS = 80;
 
-    private static final List<LineContent> LINE_CONTENTS = new Vector<>(); // synchronized vector is useful after all
-    private static final List<LineStatistics> LINE_STATISTICS = new Vector<>();
+    private static final List<LineContent> LINE_CONTENTS = new Vector<>(ROWS); // synchronized vector is useful after all
+    private static final List<LineStatistics> LINE_STATISTICS = new Vector<>(100000);
 
     private static IOException scannerException = null;
 
