@@ -6,6 +6,7 @@ Developer of the initial version of the source code is Tom Herrmann.
 
 ## ToDos ##
 * Add print-outs/logging, with statistics about performance: size of file, time to scan it, time to seek etc...
+* Add status bar in GUI that shows "scanning...", updating count of line/characters, current position
 * abstract "viewer" into separate class, so that it can be used with different kinds of GUI
 * fix scrolling, so that it does not skip updates
 * find a way to make scrolling work smoother even at the end of the file
