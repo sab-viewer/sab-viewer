@@ -16,6 +16,8 @@ Developer of the initial version of the source code is Tom Herrmann.
 * support specification of encoding to open file
 * maybe support auto detection of encoding
 * support weird kinds of line endings that nobody should use (Windows, MacOS classic)
+* add scrollbars
+* support resizing of the text area
 * support simple search (jump to next, done in separate thread, can be canceled, if takes long)
 * support more advanced search (make list, remember multiple search results etc.)
 * handle tabs (\t) correctly in fixed with views (count them as multiple characters)
@@ -26,3 +28,10 @@ Developer of the initial version of the source code is Tom Herrmann.
 * provide TUI (to make it usable via SSH).
 * probably provide mode "with cursor"
 * probably support work with binary files (e.g. hex view, search)
+* maybe implement cashing of bigger window around the visible window
+  (to make work with neighbour text smoother). If we do it, we probably
+  need to implement pagination to be able to "learn"/"forget" parts of
+  text in pieces.
+* maybe keep Reader, which cursor is at the end of current visible 
+  window (or cache) to avoid need to "skip", when just scrolling 
+  forward. How to move backwards (probably switch to RandomAccessFile)?
