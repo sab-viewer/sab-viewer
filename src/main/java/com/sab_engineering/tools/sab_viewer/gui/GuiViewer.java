@@ -30,7 +30,7 @@ public class GuiViewer {
 
     private final Semaphore initialContentLock;
     private List<LineContent> initialContent;
-    private final Semaphore lineStatisticsLock;
+
     private final List<LineStatistics> lineStatistics;
 
     private IOException scannerException = null;
@@ -41,7 +41,6 @@ public class GuiViewer {
         lineOffset = 0;
         initialContentLock = new Semaphore(1);
         initialContent = new ArrayList<>(maxRows);
-        lineStatisticsLock = new Semaphore(1);
         lineStatistics = new ArrayList<>(100000);
     }
 
@@ -94,22 +93,15 @@ public class GuiViewer {
         clearInitialContent();
 
         List<LineStatistics> linesToRead;
-        try {
-            lineStatisticsLock.acquire();
-            try {
-                if (lineStatistics.isEmpty()) {
-                    return;
-                }
-                if (firstDisplayedLineIndex >= lineStatistics.size()) {
-                    firstDisplayedLineIndex = lineStatistics.size() - 1;
-                }
-                final int oneAfterLastLineIndex = Math.min(lineStatistics.size(), firstDisplayedLineIndex + maxRows);
-                linesToRead = new ArrayList<>(lineStatistics.subList(firstDisplayedLineIndex, oneAfterLastLineIndex));
-            } finally {
-                lineStatisticsLock.release();
+        synchronized (lineStatistics) {
+            if (lineStatistics.isEmpty()) {
+                return;
             }
-        } catch (InterruptedException e) {
-            throw new IllegalStateException("Unable to get statistics lock", e);
+            if (firstDisplayedLineIndex >= lineStatistics.size()) {
+                firstDisplayedLineIndex = lineStatistics.size() - 1;
+            }
+            final int oneAfterLastLineIndex = Math.min(lineStatistics.size(), firstDisplayedLineIndex + maxRows);
+            linesToRead = new ArrayList<>(lineStatistics.subList(firstDisplayedLineIndex, oneAfterLastLineIndex));
         }
 
         final List<LineContent> lineContents;
@@ -164,15 +156,8 @@ public class GuiViewer {
     }
 
     private void addLineStatistics(LineStatistics statistics) {
-        try {
-            lineStatisticsLock.acquire();
-            try {
-                lineStatistics.add(statistics);
-            } finally {
-                lineStatisticsLock.release();
-            }
-        } catch (InterruptedException e) {
-            throw new IllegalStateException("Unable to get statistics lock", e);
+        synchronized (lineStatistics) {
+            lineStatistics.add(statistics);
         }
     }
 
