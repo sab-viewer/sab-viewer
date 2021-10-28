@@ -5,13 +5,7 @@ import com.sab_engineering.tools.sab_viewer.io.LineStatistics;
 import com.sab_engineering.tools.sab_viewer.io.Reader;
 import com.sab_engineering.tools.sab_viewer.io.Scanner;
 
-import javax.swing.Action;
-import javax.swing.JFrame;
-import javax.swing.JMenu;
-import javax.swing.JMenuBar;
-import javax.swing.JMenuItem;
-import javax.swing.JTextArea;
-import javax.swing.KeyStroke;
+import javax.swing.*;
 import java.awt.BorderLayout;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
@@ -29,6 +23,7 @@ public class GuiViewer {
 
     private int firstDisplayedLineIndex = 0; // index in lineStatistics
 
+    private JFrame frame;
     private JTextArea textArea;
 
     private List<LineContent> initialContent;
@@ -78,8 +73,14 @@ public class GuiViewer {
         }
 
         if (scannerException != null) {
-            throw new UncheckedIOException("Unable to scan file '" + fileName + "': " + scannerException.getClass().getSimpleName(), scannerException);
+            throw displayAndCreateException(scannerException, "scan");
         }
+    }
+
+    private UncheckedIOException displayAndCreateException(IOException exception, String verb)  {
+        String message = "Unable to " + verb + " file '" + fileName + "': " + exception.getClass().getSimpleName();
+        JOptionPane.showMessageDialog(frame, message, "Unable to " + verb + " file", JOptionPane.ERROR_MESSAGE);
+        return new UncheckedIOException(message, exception);
     }
 
     public void update() {
@@ -99,7 +100,7 @@ public class GuiViewer {
         try {
             lineContents = Reader.readSpecificLines(fileName, lineStatistics.subList(firstDisplayedLineIndex, oneAfterLastLineIndex), 0, maxColumns);
         } catch (IOException ioException) {
-            throw new UncheckedIOException("Unable to read file '" + fileName + "': " + ioException.getClass().getSimpleName(), ioException);
+            throw displayAndCreateException(ioException, "read");
         }
         final StringBuilder text = new StringBuilder();
         for (LineContent lineContent : lineContents) {
@@ -129,7 +130,7 @@ public class GuiViewer {
     }
 
     private void prepareGui() {
-        JFrame frame = new JFrame("SAB-Viewer");
+        frame = new JFrame("SAB-Viewer");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setSize(400, 400); // TODO: This we need to calculate based on geometry and font size
 
