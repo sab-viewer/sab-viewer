@@ -55,7 +55,7 @@ public class GuiViewer {
         int consumedLinesCount = 0;
         while (scannerThread.isAlive() || (initialContent != null && consumedLinesCount < initialContent.size())) {
             List<LineContent> content = this.initialContent;
-            while (consumedLinesCount < content.size()) {
+            while (content != null && consumedLinesCount < content.size()) {
                 LineContent newLine = content.get(consumedLinesCount);
                 consumedLinesCount += 1;
 
