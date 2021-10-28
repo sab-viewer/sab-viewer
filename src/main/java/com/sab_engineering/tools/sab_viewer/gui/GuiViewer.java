@@ -30,17 +30,19 @@ public class GuiViewer {
     private int firstDisplayedLineIndex = 0; // index in lineStatistics
 
     private JTextArea textArea;
-    private int consumedLinesCount = 0;
-    private final List<LineStatistics> lineStatistics = new Vector<>();
+
+    private List<LineContent> initialContent;
+    private final List<LineStatistics> lineStatistics;
 
     private IOException scannerException = null;
 
     public GuiViewer(final String fileName) {
         this.fileName = fileName;
+        lineStatistics = new Vector<>();
+        initialContent = new Vector<>();
     }
 
     public void show() {
-        prepareGui();
         Thread scannerThread = new Thread(
                 () -> {
                     try {
@@ -52,10 +54,27 @@ public class GuiViewer {
                 "Scanner"
         );
         scannerThread.start();
-        try {
-            scannerThread.join();
-        } catch (InterruptedException e) {
-           scannerThread.interrupt();
+
+        prepareGui();
+
+        int consumedLinesCount = 0;
+        while (scannerThread.isAlive() || (initialContent != null && consumedLinesCount < initialContent.size())) {
+            List<LineContent> content = this.initialContent;
+            while (consumedLinesCount < content.size()) {
+                LineContent newLine = content.get(consumedLinesCount);
+                consumedLinesCount += 1;
+
+                if (!textArea.getText().isEmpty()) {
+                    textArea.append("\n");
+                }
+                textArea.append(newLine.getVisibleContent());
+            }
+            try {
+                //noinspection BusyWait
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                scannerThread.interrupt();
+            }
         }
 
         if (scannerException != null) {
@@ -64,6 +83,7 @@ public class GuiViewer {
     }
 
     public void update() {
+        initialContent = null; // prevent further updates by scanner
         textArea.setText("");
         if (lineStatistics.isEmpty()) {
             return;
@@ -83,19 +103,18 @@ public class GuiViewer {
         }
         final StringBuilder text = new StringBuilder();
         for (LineContent lineContent : lineContents) {
-            text.append(lineContent.getVisibleContent()).append("\n");
+            if (text.length() > 0) {
+                text.append("\n");
+            }
+            text.append(lineContent.getVisibleContent());
         }
-        text.deleteCharAt(text.length() - 1);
         textArea.setText(text.toString());
     }
 
     private void consumeLine(LineContent lineContent) {
-        if (consumedLinesCount < maxRows) {
-            if (!textArea.getText().isEmpty()) {
-                textArea.append("\n");
-            }
-            textArea.append(lineContent.getVisibleContent());
-            consumedLinesCount++;
+        List<LineContent> content = this.initialContent;
+        if (content != null && content.size() < maxRows) {
+            content.add(lineContent);
         }
     }
 
