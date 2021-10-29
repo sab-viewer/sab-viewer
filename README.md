@@ -1,8 +1,7 @@
 # SAB-Viewer #
 
 This project is aimed to develop a viewer for large text files.
-
-Developer of the initial version of the source code is Tom Herrmann.
+It should open and be usable quickly, even when opening text files that are multiple GBs in size.
 
 ## ToDos ##
 * Add print-outs/logging, with statistics about performance: size of file, time to scan it, time to seek etc...
@@ -21,7 +20,7 @@ Developer of the initial version of the source code is Tom Herrmann.
 * support resizing of the text area
 * support simple search (jump to next, done in separate thread, can be canceled, if takes long)
 * support more advanced search (make list, remember multiple search results etc.)
-* handle tabs (\t) correctly in fixed with views (count them as multiple characters)
+* handle tabs (\t) correctly in fixed width views (count them as multiple characters)
 * support "wrap lines".
 * improve error handling
 * support multi-line selection for copy-paste for long lines... what about "very long" lines?
@@ -29,10 +28,10 @@ Developer of the initial version of the source code is Tom Herrmann.
 * provide TUI (to make it usable via SSH).
 * probably provide mode "with cursor"
 * probably support work with binary files (e.g. hex view, search)
-* maybe implement cashing of bigger window around the visible window
+* maybe implement cashing of bigger area around the visible window
   (to make work with neighbour text smoother). If we do it, we probably
   need to implement pagination to be able to "learn"/"forget" parts of
   text in pieces.
-* maybe keep Reader, which cursor is at the end of current visible 
-  window (or cache) to avoid need to "skip", when just scrolling 
-  forward. How to move backwards (probably switch to RandomAccessFile)?
+* maybe keep Reader object, maintaining file cursor at the end of current visible window (or cache)
+  to avoid need to "skip" from beginning of the file. Probably switch to FileChannel/SeekableByteChannel to allow forward?
+  and backward movement of the file cursor.
