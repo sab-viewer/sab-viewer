@@ -26,13 +26,9 @@ public class Reader implements Closeable {
         List<LineContent> resultingLines = new ArrayList<>(linesToReadOrderedByStartPositionInFile.size());
         for (LineStatistics lineStatistics : linesToReadOrderedByStartPositionInFile) {
             long offsetToApply = Math.min(offsetFromBeginningOfLine, lineStatistics.getLength());
-            seekableByteChannel.position(lineStatistics.getStartPositionInFile() + offsetToApply);
-            if (seekableByteChannel.position() != lineStatistics.getStartPositionInFile() + offsetToApply) {
-                throw new IllegalStateException("File content changed unexpectedly while reading it");
-            }
-
             int charactersToRead = (int) Math.min(numberOfVisibleCharactersPerLine, lineStatistics.getLength() - offsetToApply);
             if (charactersToRead > 0) {
+                seekableByteChannel.position(lineStatistics.getStartPositionInFile() + offsetToApply);
                 ByteBuffer lineBuffer = ByteBuffer.allocate(charactersToRead);
                 int charactersRead = seekableByteChannel.read(lineBuffer);
                 if (charactersRead != charactersToRead) {
