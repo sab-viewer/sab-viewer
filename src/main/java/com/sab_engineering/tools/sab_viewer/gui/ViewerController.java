@@ -29,6 +29,8 @@ public class ViewerController {
 
     private final List<LineStatistics> lineStatistics;
 
+    private Reader reader;
+
     private Consumer<MessageInfo> messageConsumer;
     private IOException scannerException = null;
 
@@ -107,7 +109,10 @@ public class ViewerController {
 
         final List<LineContent> lineContents;
         try {
-            lineContents = Reader.readSpecificLines(fileName, linesToRead, lineOffset, lineLength);
+            if (reader == null) {
+                reader = new Reader(fileName);
+            }
+            lineContents = reader.readSpecificLines(linesToRead, lineOffset, lineLength);
         } catch (IOException ioException) {
             throw displayAndCreateException(ioException, "read");
         }

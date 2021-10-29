@@ -32,6 +32,4 @@ It should open and be usable quickly, even when opening text files that are mult
   (to make work with neighbour text smoother). If we do it, we probably
   need to implement pagination to be able to "learn"/"forget" parts of
   text in pieces.
-* maybe keep Reader object, maintaining file cursor at the end of current visible window (or cache)
-  to avoid need to "skip" from beginning of the file. Probably switch to FileChannel/SeekableByteChannel to allow forward?
-  and backward movement of the file cursor.
+* Reader works on Byte level, but scanner not. This will cause issues when using multi byte encodings.

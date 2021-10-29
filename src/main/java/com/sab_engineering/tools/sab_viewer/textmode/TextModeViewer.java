@@ -55,13 +55,14 @@ public class TextModeViewer {
 
         try {
             if (LINE_STATISTICS.size() > ROWS) {
-                List<LineContent> lineContents = Reader.readSpecificLines(fileName, LINE_STATISTICS.subList(LINE_STATISTICS.size() / 2 - 5, LINE_STATISTICS.size() / 2 + 5), 10, COLUMNS);
+                Reader reader = new Reader(fileName);
+                List<LineContent> lineContents = reader.readSpecificLines(LINE_STATISTICS.subList(LINE_STATISTICS.size() / 2 - 5, LINE_STATISTICS.size() / 2 + 5), 10, COLUMNS);
                 System.out.println("=============Middle lines, starting from column 10 =============");
                 for (LineContent lineContent : lineContents) {
                     System.out.println(lineContent.getVisibleContent());
                 }
 
-                lineContents = Reader.readSpecificLines(fileName, LINE_STATISTICS.subList(LINE_STATISTICS.size() - 10, LINE_STATISTICS.size()), 0, COLUMNS);
+                lineContents = reader.readSpecificLines(LINE_STATISTICS.subList(LINE_STATISTICS.size() - 10, LINE_STATISTICS.size()), 0, COLUMNS);
                 System.out.println("=============Last lines=============");
                 for (LineContent lineContent : lineContents) {
                     System.out.println(lineContent.getVisibleContent());
