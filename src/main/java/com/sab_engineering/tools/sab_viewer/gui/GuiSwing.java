@@ -30,7 +30,7 @@ public class GuiSwing {
 
     public void start(final Optional<String> maybeFilePath) {
         frame.setVisible(true);
-        maybeFilePath.ifPresent(filePath -> uiListener.onOpenFile(filePath, this::updateLines));
+        maybeFilePath.ifPresent(filePath -> uiListener.onOpenFile(filePath, this::updateLines, this::showMessageDialog));
     }
 
     private void setLines(final Collection<LineContent> lines) {
@@ -117,9 +117,8 @@ public class GuiSwing {
         frame.getContentPane().add(BorderLayout.CENTER, textArea);
     }
 
-    // TODO: Find the way to show messages from the
-    public void showMessageDialog(Object message, String title, int messageType) {
-        JOptionPane.showMessageDialog(frame, message, title, messageType);
+    public void showMessageDialog(MessageInfo messageInfo) {
+        JOptionPane.showMessageDialog(frame, messageInfo.getMessage(), messageInfo.getTitle(), messageInfo.getMessageType());
     }
 
     private static abstract class ActionStub implements Action {

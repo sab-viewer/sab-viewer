@@ -5,6 +5,7 @@ import com.sab_engineering.tools.sab_viewer.io.LineStatistics;
 import com.sab_engineering.tools.sab_viewer.io.Reader;
 import com.sab_engineering.tools.sab_viewer.io.Scanner;
 
+import javax.swing.*;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
@@ -28,6 +29,7 @@ public class ViewerController {
 
     private final List<LineStatistics> lineStatistics;
 
+    private Consumer<MessageInfo> messageConsumer;
     private IOException scannerException = null;
 
     public ViewerController() {
@@ -38,8 +40,9 @@ public class ViewerController {
         lineStatistics = new ArrayList<>(100000);
     }
 
-    public void openFile(final String fileName, final Consumer<Collection<LineContent>> linesConsumer) {
+    public void openFile(final String fileName, final Consumer<Collection<LineContent>> linesConsumer, final Consumer<MessageInfo> messageConsumer) {
         this.maybeFilename = Optional.of(fileName);
+        this.messageConsumer = messageConsumer;
         Thread scannerThread = new Thread(
                 () -> {
                     try {
@@ -168,8 +171,7 @@ public class ViewerController {
 
     private UncheckedIOException displayAndCreateException(IOException exception, String verb)  {
         String message = "Unable to " + verb + " file '" + maybeFilename + "': " + exception.getClass().getSimpleName();
-        // TODO: Think, how to solve this
-//        ui.showMessageDialog(message, "Unable to " + verb + " file", JOptionPane.ERROR_MESSAGE);
+        messageConsumer.accept(new MessageInfo("Unable to " + verb + " file", message, JOptionPane.ERROR_MESSAGE));
         return new UncheckedIOException(message, exception);
     }
 
@@ -180,8 +182,8 @@ public class ViewerController {
     /* NOT STATIC */ public class UiListenerImpl implements ViewerUiListener {
 
         @Override
-        public void onOpenFile(final String filePath, final Consumer<Collection<LineContent>> linesConsumer) {
-            openFile(filePath, linesConsumer);
+        public void onOpenFile(final String filePath, final Consumer<Collection<LineContent>> linesConsumer, final Consumer<MessageInfo> messageConsumer) {
+            openFile(filePath, linesConsumer, messageConsumer);
         }
 
         @Override

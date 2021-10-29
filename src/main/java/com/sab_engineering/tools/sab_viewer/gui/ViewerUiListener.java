@@ -3,7 +3,6 @@ package com.sab_engineering.tools.sab_viewer.gui;
 import com.sab_engineering.tools.sab_viewer.io.LineContent;
 
 import java.util.Collection;
-import java.util.List;
 import java.util.function.Consumer;
 
 /**
@@ -17,7 +16,7 @@ import java.util.function.Consumer;
 public interface ViewerUiListener {
 
     // Open file
-    void onOpenFile(final String filePath, final Consumer<Collection<LineContent>> linesConsumer);
+    void onOpenFile(final String filePath, final Consumer<Collection<LineContent>> linesConsumer, final Consumer<MessageInfo> messageConsumer);
 
     // Navigation
     void onGoOneLineUp(final Consumer<Collection<LineContent>> linesConsumer);
@@ -36,5 +35,4 @@ public interface ViewerUiListener {
     void onLargeJumpDown(final Consumer<Collection<LineContent>> linesConsumer);
     void onLargeJumpLeft(final Consumer<Collection<LineContent>> linesConsumer);
     void onLargeJumpRight(final Consumer<Collection<LineContent>> linesConsumer);
-
 }
