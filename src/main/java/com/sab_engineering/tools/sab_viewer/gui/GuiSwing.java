@@ -2,42 +2,38 @@ package com.sab_engineering.tools.sab_viewer.gui;
 
 import com.sab_engineering.tools.sab_viewer.io.LineContent;
 
-import javax.swing.Action;
-import javax.swing.JFrame;
-import javax.swing.JMenu;
-import javax.swing.JMenuBar;
-import javax.swing.JMenuItem;
-import javax.swing.JOptionPane;
-import javax.swing.JTextArea;
-import javax.swing.KeyStroke;
+import javax.swing.*;
 import java.awt.BorderLayout;
 import java.awt.Font;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeListener;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 
-public class GuiSwing implements ViewerUi {
+public class GuiSwing {
 
     private final ViewerUiListener uiListener;
+    private final LinesExchanger linesExchanger;
 
     private JFrame frame;
     private JTextArea textArea;
 
     public GuiSwing(final ViewerUiListener uiListener) {
         this.uiListener = uiListener;
-        this.uiListener.setUi(this); // I really don't like this solution, but I cannot come up with something better. We really need references in both directions.
+        linesExchanger = new LinesExchanger();
         prepareGui();
     }
 
     public void start(final Optional<String> maybeFilePath) {
         frame.setVisible(true);
-        maybeFilePath.ifPresent(uiListener::onOpenFile);
+        maybeFilePath.ifPresent(filePath -> uiListener.onOpenFile(filePath, this::updateLines));
     }
 
-    @Override
-    public void setLines(final Collection<LineContent> lines) {
+    private void setLines(final Collection<LineContent> lines) {
         boolean lineAppended = false;
         final StringBuilder text = new StringBuilder();
         for (LineContent lineContent : lines) {
@@ -48,6 +44,15 @@ public class GuiSwing implements ViewerUi {
             lineAppended = true;
         }
         textArea.setText(text.toString());
+    }
+
+    // TODO: probably we can pass directly lineExchanger::setLines as a callback
+    // supposed to be called from other thread
+    public void updateLines(final Collection<LineContent> lines) {
+        linesExchanger.setLines(lines); // called from the worker thread
+        SwingUtilities.invokeLater(
+                () -> linesExchanger.consumeLines(this::setLines) // called from the GUI thread (queued in the GUI event loop)
+        );
     }
 
     private void prepareGui() {
@@ -74,37 +79,37 @@ public class GuiSwing implements ViewerUi {
         textArea.getActionMap().put("up", new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoOneLineUp();
+                uiListener.onGoOneLineUp(GuiSwing.this::updateLines);
             }
         });
         textArea.getActionMap().put("upPage", new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoOnePageUp();
+                uiListener.onGoOnePageUp(GuiSwing.this::updateLines);
             }
         });
         textArea.getActionMap().put("down", new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoOneLineDown();
+                uiListener.onGoOneLineDown(GuiSwing.this::updateLines);
             }
         });
         textArea.getActionMap().put("downPage", new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoOnePageDown();
+                uiListener.onGoOnePageDown(GuiSwing.this::updateLines);
             }
         });
         textArea.getActionMap().put("left", new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoOneColumnLeft();
+                uiListener.onGoOneColumnLeft(GuiSwing.this::updateLines);
             }
         });
         textArea.getActionMap().put("right", new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoOneColumnRight();
+                uiListener.onGoOneColumnRight(GuiSwing.this::updateLines);
             }
         });
 
@@ -112,7 +117,7 @@ public class GuiSwing implements ViewerUi {
         frame.getContentPane().add(BorderLayout.CENTER, textArea);
     }
 
-    @Override
+    // TODO: Find the way to show messages from the
     public void showMessageDialog(Object message, String title, int messageType) {
         JOptionPane.showMessageDialog(frame, message, title, messageType);
     }
@@ -146,6 +151,23 @@ public class GuiSwing implements ViewerUi {
         @Override
         public void removePropertyChangeListener(PropertyChangeListener listener) {
 
+        }
+    }
+
+    private static class LinesExchanger {
+        boolean newLinesWereWritten = false;
+        List<LineContent> lines;
+
+        public synchronized void setLines(final Collection<LineContent> newLines) {
+            lines = new ArrayList<>(newLines);
+            newLinesWereWritten = true;
+        }
+
+        public synchronized void consumeLines(final Consumer<List<LineContent>> linesConsumer) {
+            if (newLinesWereWritten) {
+                newLinesWereWritten = false;
+                linesConsumer.accept(lines);
+            }
         }
     }
 }

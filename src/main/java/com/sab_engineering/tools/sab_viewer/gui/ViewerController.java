@@ -5,13 +5,14 @@ import com.sab_engineering.tools.sab_viewer.io.LineStatistics;
 import com.sab_engineering.tools.sab_viewer.io.Reader;
 import com.sab_engineering.tools.sab_viewer.io.Scanner;
 
-import javax.swing.JOptionPane;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Semaphore;
+import java.util.function.Consumer;
 
 public class ViewerController {
     private Optional<String> maybeFilename;
@@ -21,8 +22,6 @@ public class ViewerController {
 
     private int firstDisplayedLineIndex; // index in lineStatistics
     private int lineOffset; // vertical scrolling
-
-    private ViewerUi ui;
 
     private final Semaphore initialContentLock;
     private List<LineContent> initialContent;
@@ -39,11 +38,7 @@ public class ViewerController {
         lineStatistics = new ArrayList<>(100000);
     }
 
-    void setUi(final ViewerUi ui) {
-        this.ui = ui;
-    }
-
-    public void openFile(final String fileName) {
+    public void openFile(final String fileName, final Consumer<Collection<LineContent>> linesConsumer) {
         this.maybeFilename = Optional.of(fileName);
         Thread scannerThread = new Thread(
                 () -> {
@@ -69,7 +64,7 @@ public class ViewerController {
                         consumedLinesCount += 1;
                         readLines.add(newLine);
                         final List<LineContent> readLinesCopy = new ArrayList<>(readLines);
-                        ui.setLines(readLinesCopy);
+                        linesConsumer.accept(readLinesCopy);
                     }
                 } finally {
                     initialContentLock.release();
@@ -86,7 +81,7 @@ public class ViewerController {
         }
     }
 
-    public void update() {
+    public void update(final Consumer<Collection<LineContent>> linesConsumer) {
 
         if (maybeFilename.isEmpty()) {
             return;
@@ -113,7 +108,7 @@ public class ViewerController {
         } catch (IOException ioException) {
             throw displayAndCreateException(ioException, "read");
         }
-        ui.setLines(lineContents); // For now it is done synchronously, so we don't need copy of the list
+        linesConsumer.accept(lineContents);
     }
 
     // prevent further updates by scanner
@@ -149,31 +144,32 @@ public class ViewerController {
         }
     }
 
-    private void addLineStatistics(LineStatistics statistics) {
+    private void addLineStatistics(final LineStatistics statistics) {
         synchronized (lineStatistics) {
             lineStatistics.add(statistics);
         }
     }
 
-    private void moveVertical(int offset) {
+    private void moveVertical(final int offset, final Consumer<Collection<LineContent>> linesConsumer) {
         firstDisplayedLineIndex += offset;
         if (firstDisplayedLineIndex < 0) {
             firstDisplayedLineIndex = 0;
         }
-        update();
+        update(linesConsumer);
     }
 
-    private void moveHorizontal(int offset) {
+    private void moveHorizontal(final int offset, final Consumer<Collection<LineContent>> linesConsumer) {
         lineOffset += offset;
         if (lineOffset < 0) {
             lineOffset = 0;
         }
-        update();
+        update(linesConsumer);
     }
 
     private UncheckedIOException displayAndCreateException(IOException exception, String verb)  {
         String message = "Unable to " + verb + " file '" + maybeFilename + "': " + exception.getClass().getSimpleName();
-        ui.showMessageDialog(message, "Unable to " + verb + " file", JOptionPane.ERROR_MESSAGE);
+        // TODO: Think, how to solve this
+//        ui.showMessageDialog(message, "Unable to " + verb + " file", JOptionPane.ERROR_MESSAGE);
         return new UncheckedIOException(message, exception);
     }
 
@@ -184,92 +180,87 @@ public class ViewerController {
     /* NOT STATIC */ public class UiListenerImpl implements ViewerUiListener {
 
         @Override
-        public void setUi(final ViewerUi ui) {
-            ViewerController.this.setUi(ui);
+        public void onOpenFile(final String filePath, final Consumer<Collection<LineContent>> linesConsumer) {
+            openFile(filePath, linesConsumer);
         }
 
         @Override
-        public void onOpenFile(final String filePath) {
-            openFile(filePath);
+        public void onGoOneLineUp(final Consumer<Collection<LineContent>> linesConsumer) {
+            moveVertical(-1, linesConsumer);
         }
 
         @Override
-        public void onGoOneLineUp() {
-            moveVertical(-1);
+        public void onGoOneLineDown(final Consumer<Collection<LineContent>> linesConsumer) {
+            moveVertical(1, linesConsumer);
         }
 
         @Override
-        public void onGoOneLineDown() {
-            moveVertical(1);
+        public void onGoOneColumnLeft(final Consumer<Collection<LineContent>> linesConsumer) {
+            moveHorizontal(-1, linesConsumer);
         }
 
         @Override
-        public void onGoOneColumnLeft() {
-            moveHorizontal(-1);
+        public void onGoOneColumnRight(final Consumer<Collection<LineContent>> linesConsumer) {
+            moveHorizontal(1, linesConsumer);
         }
 
         @Override
-        public void onGoOneColumnRight() {
-            moveHorizontal(1);
+        public void onGoOnePageUp(final Consumer<Collection<LineContent>> linesConsumer) {
+            moveVertical((lineCount - 1) * -1, linesConsumer);
         }
 
         @Override
-        public void onGoOnePageUp() {
-            moveVertical((lineCount - 1) * -1);
+        public void onGoOnePageDown(final Consumer<Collection<LineContent>> linesConsumer) {
+            moveVertical(lineCount - 1, linesConsumer);
         }
 
         @Override
-        public void onGoOnePageDown() {
-            moveVertical((lineCount - 1));
-        }
-
-        @Override
-        public void onGoOnePageLeft() {
+        public void onGoOnePageLeft(final Consumer<Collection<LineContent>> linesConsumer) {
             // TODO: Not Implemented Yet
         }
 
         @Override
-        public void onGoOnePageRight() {
+        public void onGoOnePageRight(final Consumer<Collection<LineContent>> linesConsumer) {
             // TODO: Not Implemented Yet
         }
 
         @Override
-        public void onGoLineBegin() {
+        public void onGoLineBegin(final Consumer<Collection<LineContent>> linesConsumer) {
             // TODO: Not Implemented Yet
         }
 
         @Override
-        public void onGoLineEnd() {
+        public void onGoLineEnd(final Consumer<Collection<LineContent>> linesConsumer) {
             // TODO: Not Implemented Yet
         }
 
         @Override
-        public void onGoHome() {
+        public void onGoHome(final Consumer<Collection<LineContent>> linesConsumer) {
             // TODO: Not Implemented Yet
         }
 
         @Override
-        public void onGoToEnd() {
+        public void onGoToEnd(final Consumer<Collection<LineContent>> linesConsumer) {
             // TODO: Not Implemented Yet
         }
 
         @Override
-        public void onLargeJumpUp() {
+        public void onLargeJumpUp(final Consumer<Collection<LineContent>> linesConsumer) {
             // TODO: Not Implemented Yet
         }
 
         @Override
-        public void onLargeJumpDown() {
+        public void onLargeJumpDown(final Consumer<Collection<LineContent>> linesConsumer) {
             // TODO: Not Implemented Yet
         }
 
         @Override
-        public void onLargeJumpLeft() {
+        public void onLargeJumpLeft(final Consumer<Collection<LineContent>> linesConsumer) {
             // TODO: Not Implemented Yet
         }
 
         @Override
-        public void onLargeJumpRight() {
+        public void onLargeJumpRight(final Consumer<Collection<LineContent>> linesConsumer) {
             // TODO: Not Implemented Yet
         }
     }

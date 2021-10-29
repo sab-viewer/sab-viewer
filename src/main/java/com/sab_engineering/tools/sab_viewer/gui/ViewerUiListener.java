@@ -1,5 +1,11 @@
 package com.sab_engineering.tools.sab_viewer.gui;
 
+import com.sab_engineering.tools.sab_viewer.io.LineContent;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.function.Consumer;
+
 /**
  * Purpose of this interface is to maintain the list of operations available to User via UI of any kind.
  *
@@ -10,28 +16,25 @@ package com.sab_engineering.tools.sab_viewer.gui;
  */
 public interface ViewerUiListener {
 
-    // Register ui by controller
-    void setUi(final ViewerUi ui);
-
     // Open file
-    void onOpenFile(final String filePath);
+    void onOpenFile(final String filePath, final Consumer<Collection<LineContent>> linesConsumer);
 
     // Navigation
-    void onGoOneLineUp();
-    void onGoOneLineDown();
-    void onGoOneColumnLeft();
-    void onGoOneColumnRight();
-    void onGoOnePageUp();
-    void onGoOnePageDown();
-    void onGoOnePageLeft();
-    void onGoOnePageRight();
-    void onGoLineBegin();
-    void onGoLineEnd();
-    void onGoHome();
-    void onGoToEnd();
-    void onLargeJumpUp();
-    void onLargeJumpDown();
-    void onLargeJumpLeft();
-    void onLargeJumpRight();
+    void onGoOneLineUp(final Consumer<Collection<LineContent>> linesConsumer);
+    void onGoOneLineDown(final Consumer<Collection<LineContent>> linesConsumer);
+    void onGoOneColumnLeft(final Consumer<Collection<LineContent>> linesConsumer);
+    void onGoOneColumnRight(final Consumer<Collection<LineContent>> linesConsumer);
+    void onGoOnePageUp(final Consumer<Collection<LineContent>> linesConsumer);
+    void onGoOnePageDown(final Consumer<Collection<LineContent>> linesConsumer);
+    void onGoOnePageLeft(final Consumer<Collection<LineContent>> linesConsumer);
+    void onGoOnePageRight(final Consumer<Collection<LineContent>> linesConsumer);
+    void onGoLineBegin(final Consumer<Collection<LineContent>> linesConsumer);
+    void onGoLineEnd(final Consumer<Collection<LineContent>> linesConsumer);
+    void onGoHome(final Consumer<Collection<LineContent>> linesConsumer);
+    void onGoToEnd(final Consumer<Collection<LineContent>> linesConsumer);
+    void onLargeJumpUp(final Consumer<Collection<LineContent>> linesConsumer);
+    void onLargeJumpDown(final Consumer<Collection<LineContent>> linesConsumer);
+    void onLargeJumpLeft(final Consumer<Collection<LineContent>> linesConsumer);
+    void onLargeJumpRight(final Consumer<Collection<LineContent>> linesConsumer);
 
 }
