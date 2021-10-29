@@ -14,7 +14,6 @@ It should open and be usable quickly, even when opening text files that are mult
 * support "open file"
 * support specification of encoding to open file
 * maybe support auto detection of encoding
-* support weird kinds of line endings that nobody should use (Windows, MacOS classic)
 * add scrollbars
 * support resizing of the text area
 * support simple search (jump to next, done in separate thread, can be canceled, if takes long)

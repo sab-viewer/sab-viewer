@@ -25,20 +25,25 @@ public class Scanner {
             int charsRead;
             do {
                 charsRead = inputReader.read(buffer);
+                char lastCharacter = '\0';
                 for (int positionInBuffer = 0; positionInBuffer < charsRead; positionInBuffer++, positionInLine++, position++) {
-                    if (buffer[positionInBuffer] == '\n') {
-                        if (positionInLine <= numberOfVisibleCharactersPerLine) {
-                            lineListener.accept(new LineContent(new String(lineBuffer, 0, positionInLine)));
+                    char currentCharacter = buffer[positionInBuffer];
+                    if (currentCharacter == '\n' || currentCharacter == '\r') {
+                        // when windows line ending is detected here, The line was already finished and published at the \r, so we just reset the counts to drop the \n
+                        if (lastCharacter != '\r' || currentCharacter != '\n') {
+                            if (positionInLine <= numberOfVisibleCharactersPerLine) {
+                                lineListener.accept(new LineContent(new String(lineBuffer, 0, positionInLine)));
+                            }
+                            statisticsListener.accept(new LineStatistics(positionOfLastNewLineStart, positionInLine));
                         }
-                        statisticsListener.accept(new LineStatistics(positionOfLastNewLineStart, positionInLine));
                         positionOfLastNewLineStart = position + 1;
-                        lineBuffer = new char[numberOfVisibleCharactersPerLine];
                         positionInLine = -1;
                     } else if (positionInLine < numberOfVisibleCharactersPerLine) {
-                        lineBuffer[positionInLine] = buffer[positionInBuffer];
+                        lineBuffer[positionInLine] = currentCharacter;
                     } else if (positionInLine == numberOfVisibleCharactersPerLine) {
                         lineListener.accept(new LineContent(new String(lineBuffer, 0, positionInLine)));
                     }
+                    lastCharacter = currentCharacter;
                 }
             } while (charsRead != -1);
 
