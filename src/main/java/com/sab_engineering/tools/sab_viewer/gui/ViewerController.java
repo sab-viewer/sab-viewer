@@ -154,15 +154,19 @@ public class ViewerController {
     }
 
     private void moveVertical(final int offset, final Consumer<Collection<LineContent>> linesConsumer) {
-        firstDisplayedLineIndex += offset;
-        if (firstDisplayedLineIndex < 0) {
-            firstDisplayedLineIndex = 0;
-        }
-        update(linesConsumer);
+        moveToPosition(firstDisplayedLineIndex + offset, lineOffset, linesConsumer);
     }
 
     private void moveHorizontal(final int offset, final Consumer<Collection<LineContent>> linesConsumer) {
-        lineOffset += offset;
+        moveToPosition(firstDisplayedLineIndex, lineOffset + offset, linesConsumer);
+    }
+
+    private void moveToPosition(final int line, final int column, final Consumer<Collection<LineContent>> linesConsumer) {
+        firstDisplayedLineIndex = line;
+        if (firstDisplayedLineIndex < 0) {
+            firstDisplayedLineIndex = 0;
+        }
+        lineOffset = column;
         if (lineOffset < 0) {
             lineOffset = 0;
         }
@@ -244,6 +248,11 @@ public class ViewerController {
         @Override
         public void onGoToEnd(final Consumer<Collection<LineContent>> linesConsumer) {
             // TODO: Not Implemented Yet
+        }
+
+        @Override
+        public void onGoTo(int line, int column, Consumer<Collection<LineContent>> linesConsumer) {
+            moveToPosition(line, column, linesConsumer);
         }
 
         @Override

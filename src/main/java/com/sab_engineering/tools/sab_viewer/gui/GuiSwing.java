@@ -5,6 +5,7 @@ import com.sab_engineering.tools.sab_viewer.io.LineContent;
 import javax.swing.*;
 import java.awt.*;
 import java.awt.event.ActionEvent;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeListener;
 import java.util.ArrayList;
@@ -60,10 +61,29 @@ public class GuiSwing {
         frame.setSize(1000, 800); // TODO: This we need to calculate based on geometry and font size
 
         JMenuBar menuBar = new JMenuBar();
+
         JMenu fileMenu = new JMenu("File");
         menuBar.add(fileMenu);
         JMenuItem openMenuItem = new JMenuItem("Open");
         fileMenu.add(openMenuItem);
+
+        JMenuItem goToMenuItem = new JMenuItem("GoTo");
+        goToMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_G, InputEvent.CTRL_DOWN_MASK));
+        goToMenuItem.addActionListener(actionEvent -> {
+            String result = (String)JOptionPane.showInputDialog(
+                    frame,
+                    "Enter Line[:Column]",
+                    "GoTo",
+                    JOptionPane.QUESTION_MESSAGE,
+                    null,
+                    null,
+                    "1:1"
+            );
+            handleGoTo(result);
+        });
+        JMenu navigateMenu = new JMenu("Navigate");
+        navigateMenu.add(goToMenuItem);
+        menuBar.add(navigateMenu);
 
         textArea = new JTextArea();
         textArea.setEditable(false);
@@ -114,6 +134,27 @@ public class GuiSwing {
 
         frame.getContentPane().add(BorderLayout.NORTH, menuBar);
         frame.getContentPane().add(BorderLayout.CENTER, textArea);
+    }
+
+    private void handleGoTo(String result) {
+        if (result.contains(":")) {
+            String[] address = result.split(":");
+            if (address.length == 2) {
+                if (address[0].matches("^\\d+$") && address[1].matches("^\\d+$")) {
+                    int line = Integer.parseInt(address[0]) - 1;
+                    int column = Integer.parseInt(address[1]) - 1;
+                    uiListener.onGoTo(line, column, GuiSwing.this::updateLines);
+
+                    return;
+                }
+            }
+        } else if (result.matches("^\\d+$")) {
+            int line = Integer.parseInt(result) - 1;
+            uiListener.onGoTo(line, 0, GuiSwing.this::updateLines);
+
+            return;
+        }
+        showMessageDialog(new MessageInfo("Invalid GoTo address", "The GoTo Address '" + result + "' cannot be parsed", JOptionPane.ERROR_MESSAGE));
     }
 
     public void showMessageDialog(MessageInfo messageInfo) {

@@ -31,6 +31,7 @@ public interface ViewerUiListener {
     void onGoLineEnd(final Consumer<Collection<LineContent>> linesConsumer);
     void onGoHome(final Consumer<Collection<LineContent>> linesConsumer);
     void onGoToEnd(final Consumer<Collection<LineContent>> linesConsumer);
+    void onGoTo(final int line, final int column, final Consumer<Collection<LineContent>> linesConsumer);
     void onLargeJumpUp(final Consumer<Collection<LineContent>> linesConsumer);
     void onLargeJumpDown(final Consumer<Collection<LineContent>> linesConsumer);
     void onLargeJumpLeft(final Consumer<Collection<LineContent>> linesConsumer);
