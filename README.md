@@ -4,14 +4,16 @@ This project is aimed to develop a viewer for large text files.
 It should open and be usable quickly, even when opening text files that are multiple GBs in size.
 
 ## ToDos ##
-* Add print-outs/logging, with statistics about performance: size of file, time to scan it, time to seek etc...
-* Add status bar in GUI that shows "scanning...", updating count of line/characters, current position
-* fix scrolling, so that it does not skip updates
-* find a way to make scrolling work smoother even at the end of the file
-* test with very long lines (GB long)
 * add goto
 * support END and HOME and CTRL-END and CTRL-HOME
 * support "open file"
+* Add print-outs/logging, with statistics about performance: size of file, time to scan it, time to seek etc...
+* Add status bar in GUI that shows "scanning...", updating count of line/characters, current position
+* fix scrolling, so that it does not skip updates
+* Make "read" run async (think, how to do it in smart way, so that we don't oversubscribe both: 
+  "read" and "update" - skip intermediate request, which did not start yet).
+* find a way to make scrolling work smoother even at the end of the file
+* test with very long lines (GB long)
 * support specification of encoding to open file
 * maybe support auto detection of encoding
 * support weird kinds of line endings that nobody should use (Windows, MacOS classic)

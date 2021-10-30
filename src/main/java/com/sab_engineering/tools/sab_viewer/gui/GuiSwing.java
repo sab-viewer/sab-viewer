@@ -3,8 +3,7 @@ package com.sab_engineering.tools.sab_viewer.gui;
 import com.sab_engineering.tools.sab_viewer.io.LineContent;
 
 import javax.swing.*;
-import java.awt.BorderLayout;
-import java.awt.Font;
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeListener;
@@ -22,8 +21,8 @@ public class GuiSwing {
     private JFrame frame;
     private JTextArea textArea;
 
-    public GuiSwing(final ViewerUiListener uiListener) {
-        this.uiListener = uiListener;
+    public GuiSwing() {
+        this.uiListener = new ViewerController().getViewerListener(); // if we every need to store direct access to controller, then we can change the way it is done here
         linesExchanger = new LinesExchanger();
         prepareGui();
     }
