@@ -199,7 +199,7 @@ public class GuiSwing {
         textArea.getActionMap().put(AMK_GO_TO_LINE_BEGIN, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onToGoLineBegin(GuiSwing.this::updateLines);
+                uiListener.onGoToLineBegin(GuiSwing.this::updateLines);
             }
         });
         textArea.getActionMap().put(AMK_GO_TO_LINE_END, new ActionStub() {

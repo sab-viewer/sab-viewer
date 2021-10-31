@@ -21,6 +21,9 @@ public class ViewerController {
     private final int lineCount = 50; // TODO: This should be changed on window resize (for now it is final just to disable warning)
     private final int lineLength = 150;
 
+    private final int verticalLargeJump = 200; // TODO: Should be modifiable by user in settings
+    private final int horizontalLargeJump = 100;
+
     private int firstDisplayedLineIndex; // index in lineStatistics
     private int lineOffset; // vertical scrolling
 
@@ -225,17 +228,17 @@ public class ViewerController {
 
         @Override
         public void onGoOnePageLeft(final Consumer<Collection<LineContent>> linesConsumer) {
-            // TODO: Not Implemented Yet
+            moveHorizontal((-1)*(lineLength - 1), linesConsumer);
         }
 
         @Override
         public void onGoOnePageRight(final Consumer<Collection<LineContent>> linesConsumer) {
-            // TODO: Not Implemented Yet
+            moveHorizontal(lineLength - 1, linesConsumer); // TODO: Do we need to stop it, when we reach end of line? which line?
         }
 
         @Override
-        public void onToGoLineBegin(final Consumer<Collection<LineContent>> linesConsumer) {
-            // TODO: Not Implemented Yet
+        public void onGoToLineBegin(final Consumer<Collection<LineContent>> linesConsumer) {
+            moveToPosition(lineOffset, 0, linesConsumer);
         }
 
         @Override
@@ -245,12 +248,13 @@ public class ViewerController {
 
         @Override
         public void onGoToFirstLine(final Consumer<Collection<LineContent>> linesConsumer) {
-            // TODO: Not Implemented Yet
+            moveToPosition(0, 0, linesConsumer);
         }
 
         @Override
         public void onGoToLastLine(final Consumer<Collection<LineContent>> linesConsumer) {
-            // TODO: Not Implemented Yet
+            final int verticalOffset = Math.max(0, lineStatistics.size() - lineCount);
+            moveToPosition(verticalOffset, 0, linesConsumer);
         }
 
         @Override
@@ -260,22 +264,22 @@ public class ViewerController {
 
         @Override
         public void onLargeJumpUp(final Consumer<Collection<LineContent>> linesConsumer) {
-            // TODO: Not Implemented Yet
+            moveVertical((-1) * verticalLargeJump, linesConsumer);
         }
 
         @Override
         public void onLargeJumpDown(final Consumer<Collection<LineContent>> linesConsumer) {
-            // TODO: Not Implemented Yet
+            moveVertical(verticalLargeJump, linesConsumer);
         }
 
         @Override
         public void onLargeJumpLeft(final Consumer<Collection<LineContent>> linesConsumer) {
-            // TODO: Not Implemented Yet
+            moveHorizontal((-1) * horizontalLargeJump, linesConsumer);
         }
 
         @Override
         public void onLargeJumpRight(final Consumer<Collection<LineContent>> linesConsumer) {
-            // TODO: Not Implemented Yet
+            moveHorizontal(horizontalLargeJump, linesConsumer); // TODO: Do we need to stop it, when we reach end of line? which line?
         }
     }
 

@@ -27,7 +27,7 @@ public interface ViewerUiListener {
     void onGoOnePageDown(final Consumer<Collection<LineContent>> linesConsumer);
     void onGoOnePageLeft(final Consumer<Collection<LineContent>> linesConsumer);
     void onGoOnePageRight(final Consumer<Collection<LineContent>> linesConsumer);
-    void onToGoLineBegin(final Consumer<Collection<LineContent>> linesConsumer);
+    void onGoToLineBegin(final Consumer<Collection<LineContent>> linesConsumer);
     void onGoToLineEnd(final Consumer<Collection<LineContent>> linesConsumer);
     void onGoToFirstLine(final Consumer<Collection<LineContent>> linesConsumer);
     void onGoToLastLine(final Consumer<Collection<LineContent>> linesConsumer);
