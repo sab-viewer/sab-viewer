@@ -11,7 +11,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class Reader {
-    public static List<LineContent> readSpecificLines(String fileName, List<LineStatistics> linesToReadOrderedByStartPositionInFile, int offsetFromBeginningOfLine, int numberOfVisibleCharactersPerLine) throws IOException {
+    public static List<LineContent> readSpecificLines(String fileName, List<LineStatistics> linesToReadOrderedByStartPositionInFile, long offsetFromBeginningOfLine, int numberOfVisibleCharactersPerLine) throws IOException {
         if (offsetFromBeginningOfLine < 0) {
             throw new IllegalStateException("Negative offsets are not supported: " + offsetFromBeginningOfLine);
         }

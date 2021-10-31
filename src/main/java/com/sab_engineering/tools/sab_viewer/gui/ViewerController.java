@@ -18,41 +18,42 @@ import java.util.function.Consumer;
 public class ViewerController {
     private Optional<String> maybeFilename;
 
-    private final int lineCount = 50; // TODO: This should be changed on window resize (for now it is final just to disable warning)
-    private final int lineLength = 150;
+    private final int currentlyDisplayedLines = 50; // TODO: This should be changed on window resize (for now it is final just to disable warning)
+    private final int currentlyDisplayedColumns = 150;
 
-    private final int verticalLargeJump = 200; // TODO: Should be modifiable by user in settings
-    private final int horizontalLargeJump = 100;
+    private final int largeLinesJump = currentlyDisplayedLines * 10; // TODO: Should be modifiable by user in settings
+    private final int largeColumnsJump = currentlyDisplayedColumns * 10;
 
     private int firstDisplayedLineIndex; // index in lineStatistics
-    private int lineOffset; // vertical scrolling
+    private long firstDisplayedColumnIndex;
 
-    private final Semaphore initialContentLock;
-    private List<LineContent> initialContent;
+    private final Semaphore initialLinesLock;
+    private List<LineContent> initialLines_toBeAccessedLocked;
 
-    private final List<LineStatistics> lineStatistics;
+    private final List<LineStatistics> lineStatistics_toBeAccessedSynchronized;
 
     private Consumer<MessageInfo> messageConsumer;
     private IOException scannerException = null;
 
     public ViewerController() {
         firstDisplayedLineIndex = 0;
-        lineOffset = 0;
-        initialContentLock = new Semaphore(1);
-        initialContent = new ArrayList<>(lineCount);
-        lineStatistics = new ArrayList<>(100000);
+        firstDisplayedColumnIndex = 0;
+        initialLinesLock = new Semaphore(1);
+        initialLines_toBeAccessedLocked = new ArrayList<>(currentlyDisplayedLines);
+        lineStatistics_toBeAccessedSynchronized = new ArrayList<>(100000);
     }
 
     public void openFile(final String fileName, final Consumer<Collection<LineContent>> linesConsumer, final Consumer<MessageInfo> messageConsumer) {
 
         // TODO: We need to handle the case, that it is subsequent "open", so we need to cancel current operations and clean the buffer before start scanning
+        // OR just interrupt and then dump the entire Controller and create a new one
 
         this.maybeFilename = Optional.of(fileName);
         this.messageConsumer = messageConsumer;
         Thread scannerThread = new Thread(
                 () -> {
                     try {
-                        Scanner.scanFile(fileName, this::addInitialContent, lineLength, this::addLineStatistics);
+                        Scanner.scanFile(fileName, this::addInitialContent, currentlyDisplayedColumns, this::addLineStatistics);
                     } catch (IOException ioException) {
                         clearInitialContent();
                         scannerException = ioException;
@@ -62,21 +63,18 @@ public class ViewerController {
         );
         scannerThread.start();
 
-        int consumedLinesCount = 0;
-        final List<LineContent> readLines = new ArrayList<>();
-        while (scannerThread.isAlive() || (consumedLinesCount < lineCount && initialContent != null)) {
+        final List<LineContent> initialLinesRead = new ArrayList<>();
+        while (scannerThread.isAlive() || (initialLinesRead.size() < currentlyDisplayedLines && initialLines_toBeAccessedLocked != null)) {
             try {
-                initialContentLock.acquire();
+                initialLinesLock.acquire();
                 try {
-                    while (initialContent != null && consumedLinesCount < initialContent.size()) {
-                        final LineContent newLine = initialContent.get(consumedLinesCount);
-                        consumedLinesCount += 1;
-                        readLines.add(newLine);
-                        final List<LineContent> readLinesCopy = new ArrayList<>(readLines);
-                        linesConsumer.accept(readLinesCopy);
+                    while (initialLines_toBeAccessedLocked != null && initialLinesRead.size() < initialLines_toBeAccessedLocked.size()) {
+                        final LineContent newLine = initialLines_toBeAccessedLocked.get(initialLinesRead.size());
+                        initialLinesRead.add(newLine);
+                        linesConsumer.accept(new ArrayList<>(initialLinesRead));
                     }
                 } finally {
-                    initialContentLock.release();
+                    initialLinesLock.release();
                 }
                 //noinspection BusyWait
                 Thread.sleep(10);
@@ -100,20 +98,20 @@ public class ViewerController {
         clearInitialContent();
 
         List<LineStatistics> linesToRead;
-        synchronized (lineStatistics) {
-            if (lineStatistics.isEmpty()) {
+        synchronized (lineStatistics_toBeAccessedSynchronized) {
+            if (lineStatistics_toBeAccessedSynchronized.isEmpty()) {
                 return;
             }
-            if (firstDisplayedLineIndex >= lineStatistics.size()) {
-                firstDisplayedLineIndex = lineStatistics.size() - 1;
+            if (firstDisplayedLineIndex >= lineStatistics_toBeAccessedSynchronized.size()) {
+                firstDisplayedLineIndex = lineStatistics_toBeAccessedSynchronized.size() - 1;
             }
-            final int oneAfterLastLineIndex = Math.min(lineStatistics.size(), firstDisplayedLineIndex + lineCount);
-            linesToRead = new ArrayList<>(lineStatistics.subList(firstDisplayedLineIndex, oneAfterLastLineIndex));
+            final int oneAfterLastLineIndex = Math.min(lineStatistics_toBeAccessedSynchronized.size(), firstDisplayedLineIndex + currentlyDisplayedLines);
+            linesToRead = new ArrayList<>(lineStatistics_toBeAccessedSynchronized.subList(firstDisplayedLineIndex, oneAfterLastLineIndex));
         }
 
         final List<LineContent> lineContents;
         try {
-            lineContents = Reader.readSpecificLines(fileName, linesToRead, lineOffset, lineLength);
+            lineContents = Reader.readSpecificLines(fileName, linesToRead, firstDisplayedColumnIndex, currentlyDisplayedColumns);
         } catch (IOException ioException) {
             throw displayAndCreateException(ioException, "read");
         }
@@ -122,13 +120,13 @@ public class ViewerController {
 
     // prevent further updates by scanner
     private void clearInitialContent() {
-        if (initialContent != null) {
+        if (initialLines_toBeAccessedLocked != null) {
             try {
-                initialContentLock.acquire();
+                initialLinesLock.acquire();
                 try {
-                    initialContent = null;
+                    initialLines_toBeAccessedLocked = null;
                 } finally {
-                    initialContentLock.release();
+                    initialLinesLock.release();
                 }
             } catch (InterruptedException e) {
                 throw new IllegalStateException("Unable to get content lock", e);
@@ -137,15 +135,15 @@ public class ViewerController {
     }
 
     private void addInitialContent(LineContent lineContent) {
-        if (initialContent != null) {
+        if (initialLines_toBeAccessedLocked != null) {
             try {
-                    initialContentLock.acquire();
+                    initialLinesLock.acquire();
                     try {
-                        if (initialContent != null && initialContent.size() < lineCount) {
-                            initialContent.add(lineContent);
+                        if (initialLines_toBeAccessedLocked != null && initialLines_toBeAccessedLocked.size() < currentlyDisplayedLines) {
+                            initialLines_toBeAccessedLocked.add(lineContent);
                         }
                     } finally {
-                        initialContentLock.release();
+                        initialLinesLock.release();
                     }
             } catch (InterruptedException e) {
                 throw new IllegalStateException("Unable to get content lock", e);
@@ -154,28 +152,22 @@ public class ViewerController {
     }
 
     private void addLineStatistics(final LineStatistics statistics) {
-        synchronized (lineStatistics) {
-            lineStatistics.add(statistics);
+        synchronized (lineStatistics_toBeAccessedSynchronized) {
+            lineStatistics_toBeAccessedSynchronized.add(statistics);
         }
     }
 
-    private void moveVertical(final int offset, final Consumer<Collection<LineContent>> linesConsumer) {
-        moveToPosition(firstDisplayedLineIndex + offset, lineOffset, linesConsumer);
+    private void moveVertical(final int lineOffset, final Consumer<Collection<LineContent>> linesConsumer) {
+        moveToPosition(firstDisplayedLineIndex + lineOffset, firstDisplayedColumnIndex, linesConsumer);
     }
 
-    private void moveHorizontal(final int offset, final Consumer<Collection<LineContent>> linesConsumer) {
-        moveToPosition(firstDisplayedLineIndex, lineOffset + offset, linesConsumer);
+    private void moveHorizontal(final long columnOffset, final Consumer<Collection<LineContent>> linesConsumer) {
+        moveToPosition(firstDisplayedLineIndex, firstDisplayedColumnIndex + columnOffset, linesConsumer);
     }
 
-    private void moveToPosition(final int line, final int column, final Consumer<Collection<LineContent>> linesConsumer) {
-        firstDisplayedLineIndex = line;
-        if (firstDisplayedLineIndex < 0) {
-            firstDisplayedLineIndex = 0;
-        }
-        lineOffset = column;
-        if (lineOffset < 0) {
-            lineOffset = 0;
-        }
+    private void moveToPosition(final int firstDisplayedLineIndex, final long firstDisplayedColumnIndex, final Consumer<Collection<LineContent>> linesConsumer) {
+        this.firstDisplayedLineIndex = Math.max(firstDisplayedLineIndex, 0);
+        this.firstDisplayedColumnIndex = Math.max(firstDisplayedColumnIndex, 0);
         update(linesConsumer);
     }
 
@@ -218,32 +210,40 @@ public class ViewerController {
 
         @Override
         public void onGoOnePageUp(final Consumer<Collection<LineContent>> linesConsumer) {
-            moveVertical((lineCount - 1) * -1, linesConsumer);
+            moveVertical((currentlyDisplayedLines - 1) * -1, linesConsumer);
         }
 
         @Override
         public void onGoOnePageDown(final Consumer<Collection<LineContent>> linesConsumer) {
-            moveVertical(lineCount - 1, linesConsumer);
+            moveVertical(currentlyDisplayedLines - 1, linesConsumer);
         }
 
         @Override
         public void onGoOnePageLeft(final Consumer<Collection<LineContent>> linesConsumer) {
-            moveHorizontal((-1)*(lineLength - 1), linesConsumer);
+            moveHorizontal((-1)*(currentlyDisplayedColumns - 1), linesConsumer);
         }
 
         @Override
         public void onGoOnePageRight(final Consumer<Collection<LineContent>> linesConsumer) {
-            moveHorizontal(lineLength - 1, linesConsumer); // TODO: Do we need to stop it, when we reach end of line? which line?
+            moveHorizontal(currentlyDisplayedColumns - 1, linesConsumer); // TODO: Do we need to stop it, when we reach end of line? which line?
         }
 
         @Override
         public void onGoToLineBegin(final Consumer<Collection<LineContent>> linesConsumer) {
-            moveToPosition(lineOffset, 0, linesConsumer);
+            moveToPosition(firstDisplayedLineIndex, 0, linesConsumer);
         }
 
         @Override
         public void onGoToLineEnd(final Consumer<Collection<LineContent>> linesConsumer) {
-            // TODO: Not Implemented Yet
+            LineStatistics statisticOfCurrentLine = null;
+            synchronized (lineStatistics_toBeAccessedSynchronized) {
+                if (lineStatistics_toBeAccessedSynchronized.size() > firstDisplayedLineIndex) {
+                    statisticOfCurrentLine = ViewerController.this.lineStatistics_toBeAccessedSynchronized.get(firstDisplayedLineIndex);
+                }
+            }
+            if (statisticOfCurrentLine != null) {
+                moveToPosition(firstDisplayedLineIndex, statisticOfCurrentLine.getLength() - currentlyDisplayedColumns, linesConsumer);
+            }
         }
 
         @Override
@@ -253,33 +253,36 @@ public class ViewerController {
 
         @Override
         public void onGoToLastLine(final Consumer<Collection<LineContent>> linesConsumer) {
-            final int verticalOffset = Math.max(0, lineStatistics.size() - lineCount);
-            moveToPosition(verticalOffset, 0, linesConsumer);
+            int line;
+            synchronized (lineStatistics_toBeAccessedSynchronized) {
+                line = Math.max(0, lineStatistics_toBeAccessedSynchronized.size() - currentlyDisplayedLines);
+            }
+            moveToPosition(line, 0, linesConsumer);
         }
 
         @Override
-        public void onGoTo(int line, int column, Consumer<Collection<LineContent>> linesConsumer) {
-            moveToPosition(line, column, linesConsumer);
+        public void onGoTo(int firstDisplayedLineIndex, int firstDisplayedColumnIndex, Consumer<Collection<LineContent>> linesConsumer) {
+            moveToPosition(firstDisplayedLineIndex, firstDisplayedColumnIndex, linesConsumer);
         }
 
         @Override
         public void onLargeJumpUp(final Consumer<Collection<LineContent>> linesConsumer) {
-            moveVertical((-1) * verticalLargeJump, linesConsumer);
+            moveVertical((-1) * largeLinesJump, linesConsumer);
         }
 
         @Override
         public void onLargeJumpDown(final Consumer<Collection<LineContent>> linesConsumer) {
-            moveVertical(verticalLargeJump, linesConsumer);
+            moveVertical(largeLinesJump, linesConsumer);
         }
 
         @Override
         public void onLargeJumpLeft(final Consumer<Collection<LineContent>> linesConsumer) {
-            moveHorizontal((-1) * horizontalLargeJump, linesConsumer);
+            moveHorizontal((-1) * largeColumnsJump, linesConsumer);
         }
 
         @Override
         public void onLargeJumpRight(final Consumer<Collection<LineContent>> linesConsumer) {
-            moveHorizontal(horizontalLargeJump, linesConsumer); // TODO: Do we need to stop it, when we reach end of line? which line?
+            moveHorizontal(largeColumnsJump, linesConsumer); // TODO: Do we need to stop it, when we reach end of line? which line?
         }
     }
 
