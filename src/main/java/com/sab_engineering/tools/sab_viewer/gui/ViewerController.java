@@ -5,7 +5,7 @@ import com.sab_engineering.tools.sab_viewer.io.LineStatistics;
 import com.sab_engineering.tools.sab_viewer.io.Reader;
 import com.sab_engineering.tools.sab_viewer.io.Scanner;
 
-import javax.swing.*;
+import javax.swing.JOptionPane;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
@@ -41,6 +41,9 @@ public class ViewerController {
     }
 
     public void openFile(final String fileName, final Consumer<Collection<LineContent>> linesConsumer, final Consumer<MessageInfo> messageConsumer) {
+
+        // TODO: We need to handle the case, that it is subsequent "open", so we need to cancel current operations and clean the buffer before start scanning
+
         this.maybeFilename = Optional.of(fileName);
         this.messageConsumer = messageConsumer;
         Thread scannerThread = new Thread(
@@ -227,22 +230,22 @@ public class ViewerController {
         }
 
         @Override
-        public void onGoLineBegin(final Consumer<Collection<LineContent>> linesConsumer) {
+        public void onToGoLineBegin(final Consumer<Collection<LineContent>> linesConsumer) {
             // TODO: Not Implemented Yet
         }
 
         @Override
-        public void onGoLineEnd(final Consumer<Collection<LineContent>> linesConsumer) {
+        public void onGoToLineEnd(final Consumer<Collection<LineContent>> linesConsumer) {
             // TODO: Not Implemented Yet
         }
 
         @Override
-        public void onGoHome(final Consumer<Collection<LineContent>> linesConsumer) {
+        public void onGoToFirstLine(final Consumer<Collection<LineContent>> linesConsumer) {
             // TODO: Not Implemented Yet
         }
 
         @Override
-        public void onGoToEnd(final Consumer<Collection<LineContent>> linesConsumer) {
+        public void onGoToLastLine(final Consumer<Collection<LineContent>> linesConsumer) {
             // TODO: Not Implemented Yet
         }
 
@@ -264,6 +267,11 @@ public class ViewerController {
         @Override
         public void onLargeJumpRight(final Consumer<Collection<LineContent>> linesConsumer) {
             // TODO: Not Implemented Yet
+        }
+
+        @Override
+        public void onGoToLineColumn(int line, int column, Consumer<Collection<LineContent>> linesConsumer) {
+            // TODO: Not implemented yet
         }
     }
 
