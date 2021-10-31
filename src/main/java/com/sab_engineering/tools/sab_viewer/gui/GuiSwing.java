@@ -3,16 +3,13 @@ package com.sab_engineering.tools.sab_viewer.gui;
 import com.sab_engineering.tools.sab_viewer.io.LineContent;
 
 import javax.swing.Action;
-import javax.swing.JButton;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
-import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JTextArea;
-import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
@@ -44,10 +41,10 @@ public class GuiSwing {
     public static final String AMK_LARGE_JUMP_DOWN = "ctrl+down";
     public static final String AMK_LARGE_JUMP_LEFT = "ctrl+left";
     public static final String AMK_LARGE_JUMP_RIGHT = "ctrl+right";
-    public static final String AMK_GO_TO_LINE_CHAR = "ctrl+g";
     public static final String AMK_OPEN_FILE = "ctrl+o";
     public static final String AMK_GO_ONE_PAGE_LEFT = "go_one_page_left";
     public static final String AMK_GO_ONE_PAGE_RIGHT = "go_one_page_right";
+
     private final ViewerUiListener uiListener;
     private final LinesExchanger linesExchanger;
 
@@ -110,31 +107,34 @@ public class GuiSwing {
         prepareInputMapOfTextArea(textArea);
 
         JMenuBar menuBar = new JMenuBar();
+
         JMenu fileMenu = new JMenu("File");
         menuBar.add(fileMenu);
+
         JMenuItem openMenuItem = new JMenuItem("Open");
         fileMenu.add(openMenuItem);
         openMenuItem.addActionListener(e -> onOpenFile());
 
+        JMenuItem goToMenuItem = new JMenuItem("GoTo");
+        goToMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_G, InputEvent.CTRL_DOWN_MASK));
+        goToMenuItem.addActionListener(actionEvent -> {
+            String result = (String)JOptionPane.showInputDialog(
+                    frame,
+                    "Enter Line[:Column]",
+                    "GoTo",
+                    JOptionPane.QUESTION_MESSAGE,
+                    null,
+                    null,
+                    "1:1"
+            );
+            handleGoTo(result);
+        });
+        JMenu navigateMenu = new JMenu("Navigate");
+        navigateMenu.add(goToMenuItem);
+        menuBar.add(navigateMenu);
+
         frame.getContentPane().add(BorderLayout.NORTH, menuBar);
         frame.getContentPane().add(BorderLayout.CENTER, textArea);
-    }
-
-    public void showGoToDialog() {
-        final JFrame frame = new JFrame("GOTO");
-        final JLabel labelLine = new JLabel("Line: ");
-        final JLabel labelColumn = new JLabel("Column: " );
-        final JTextField fieldLine = new JTextField();
-        final JTextField fieldColumn = new JTextField();
-        final JButton buttonOk = new JButton("OK");
-        final JButton buttonCancel = new JButton("Cancel");
-        frame.getContentPane().add(labelLine);
-        frame.getContentPane().add(fieldLine);
-        frame.getContentPane().add(labelColumn);
-        frame.getContentPane().add(fieldColumn);
-        frame.getContentPane().add(buttonOk);
-        frame.getContentPane().add(buttonCancel);
-        frame.setVisible(true);
     }
 
     private void prepareInputMapOfTextArea(final JTextArea textArea) {
@@ -156,7 +156,6 @@ public class GuiSwing {
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.ALT_DOWN_MASK), AMK_GO_ONE_PAGE_DOWN);
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, InputEvent.ALT_DOWN_MASK), AMK_GO_ONE_PAGE_LEFT);
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, InputEvent.ALT_DOWN_MASK), AMK_GO_ONE_PAGE_RIGHT);
-        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_G, InputEvent.CTRL_DOWN_MASK), AMK_GO_TO_LINE_CHAR);
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK), AMK_OPEN_FILE);
     }
 
@@ -257,21 +256,33 @@ public class GuiSwing {
                 uiListener.onGoOnePageRight(GuiSwing.this::updateLines);
             }
         });
-
-        textArea.getActionMap().put(AMK_GO_TO_LINE_CHAR, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                showGoToDialog();
-                // TODO: Open dialog to input coordinates to go to. This dialog should trigger the method below, when accepted.
-//                uiListener.onGoToLineColumn(line, column, GuiSwing.this::updateLines);
-            }
-        });
         textArea.getActionMap().put(AMK_OPEN_FILE, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
                 onOpenFile();
             }
         });
+    }
+
+    private void handleGoTo(String result) {
+        if (result.contains(":")) {
+            String[] address = result.split(":");
+            if (address.length == 2) {
+                if (address[0].matches("^\\d+$") && address[1].matches("^\\d+$")) {
+                    int line = Integer.parseInt(address[0]) - 1;
+                    int column = Integer.parseInt(address[1]) - 1;
+                    uiListener.onGoTo(line, column, GuiSwing.this::updateLines);
+
+                    return;
+                }
+            }
+        } else if (result.matches("^\\d+$")) {
+            int line = Integer.parseInt(result) - 1;
+            uiListener.onGoTo(line, 0, GuiSwing.this::updateLines);
+
+            return;
+        }
+        showMessageDialog(new MessageInfo("Invalid GoTo address", "The GoTo Address '" + result + "' cannot be parsed", JOptionPane.ERROR_MESSAGE));
     }
 
     public void showMessageDialog(MessageInfo messageInfo) {

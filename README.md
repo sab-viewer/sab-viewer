@@ -4,7 +4,6 @@ This project is aimed to develop a viewer for large text files.
 It should open and be usable quickly, even when opening text files that are multiple GBs in size.
 
 ## ToDos ##
-* add goto
 * support END and HOME and CTRL-END and CTRL-HOME
 * support "open file"
 * Add print-outs/logging, with statistics about performance: size of file, time to scan it, time to seek etc...
