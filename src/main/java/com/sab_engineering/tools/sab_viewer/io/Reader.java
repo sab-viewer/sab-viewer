@@ -18,7 +18,7 @@ public class Reader implements Closeable {
         seekableByteChannel = Files.newByteChannel(Paths.get(fileName), StandardOpenOption.READ);
     }
 
-    public List<LineContent> readSpecificLines(List<LineStatistics> linesToReadOrderedByStartPositionInFile, int offsetFromBeginningOfLine, int numberOfVisibleCharactersPerLine) throws IOException {
+    public List<LineContent> readSpecificLines(List<LineStatistics> linesToReadOrderedByStartPositionInFile, long offsetFromBeginningOfLine, int numberOfVisibleCharactersPerLine) throws IOException {
         if (offsetFromBeginningOfLine < 0) {
             throw new IllegalStateException("Negative offsets are not supported: " + offsetFromBeginningOfLine);
         }
