@@ -6,7 +6,7 @@ It should open and be usable quickly, even when opening text files that are mult
 ## ToDos ##
 * Decide, how to handle "END" and implement it
 * support "open file" (see todo in controller in `openFile()`);
-* Add print-outs/logging, with statistics about performance: size of file, time to scan it, time to seek etc...
+* Add print-outs/logging, with statistics about performance: size of file, time to scan it, time to seek etc... Or maybe put it into GUI
 * Add status bar in GUI that shows "scanning...", updating count of line/characters, current position
 * Add scrollbars
 * fix scrolling, so that it does not skip updates
@@ -35,3 +35,4 @@ It should open and be usable quickly, even when opening text files that are mult
   need to implement pagination to be able to "learn"/"forget" parts of
   text in pieces.
 * Reader works on Byte level, but scanner not. This will cause issues when using multi byte encodings.
+* Test with very large files. Probably ~100Gb
