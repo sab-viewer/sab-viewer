@@ -1,7 +1,6 @@
 package com.sab_engineering.tools.sab_viewer;
 
 import com.sab_engineering.tools.sab_viewer.gui.GuiSwing;
-import com.sab_engineering.tools.sab_viewer.gui.ViewerController;
 import com.sab_engineering.tools.sab_viewer.textmode.TextModeViewer;
 
 import java.io.PrintWriter;
@@ -29,9 +28,7 @@ public class CLI {
             if (textMode) {
                 TextModeViewer.view(fileName);
             } else {
-                final ViewerController viewerController = new ViewerController();
-                GuiSwing guiSwing = new GuiSwing(viewerController.getViewerListener());
-                guiSwing.start(Optional.of(fileName));
+                new GuiSwing().start(Optional.of(fileName));
             }
         } catch (Exception e) {
             String message = e.getMessage();

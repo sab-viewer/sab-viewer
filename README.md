@@ -4,14 +4,16 @@ This project is aimed to develop a viewer for large text files.
 It should open and be usable quickly, even when opening text files that are multiple GBs in size.
 
 ## ToDos ##
-* Add print-outs/logging, with statistics about performance: size of file, time to scan it, time to seek etc...
+* Decide, how to handle "END" and implement it
+* support "open file" (see todo in controller in `openFile()`);
+* Add print-outs/logging, with statistics about performance: size of file, time to scan it, time to seek etc... Or maybe put it into GUI
 * Add status bar in GUI that shows "scanning...", updating count of line/characters, current position
+* Add scrollbars
 * fix scrolling, so that it does not skip updates
+* Make "read" run async (think, how to do it in smart way, so that we don't oversubscribe both: 
+  "read" and "update" - skip intermediate request, which did not start yet).
 * find a way to make scrolling work smoother even at the end of the file
 * test with very long lines (GB long)
-* add goto
-* support END and HOME and CTRL-END and CTRL-HOME
-* support "open file"
 * support specification of encoding to open file
 * maybe support auto detection of encoding
 * add scrollbars
@@ -31,6 +33,5 @@ It should open and be usable quickly, even when opening text files that are mult
   (to make work with neighbour text smoother). If we do it, we probably
   need to implement pagination to be able to "learn"/"forget" parts of
   text in pieces.
-* maybe keep Reader object, maintaining file cursor at the end of current visible window (or cache)
-  to avoid need to "skip" from beginning of the file. Probably switch to FileChannel/SeekableByteChannel to allow forward?
-  and backward movement of the file cursor.
+* Reader works on Byte level, but scanner not. This will cause issues when using multi byte encodings.
+* Test with very large files. Probably ~100Gb
