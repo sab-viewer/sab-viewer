@@ -4,7 +4,6 @@ This project is aimed to develop a viewer for large text files.
 It should open and be usable quickly, even when opening text files that are multiple GBs in size.
 
 ## ToDos ##
-* Decide, how to handle "END" and implement it
 * support "open file" (see todo in controller in `openFile()`);
 * Add print-outs/logging, with statistics about performance: size of file, time to scan it, time to seek etc... Or maybe put it into GUI
 * Add status bar in GUI that shows "scanning...", updating count of line/characters, current position
