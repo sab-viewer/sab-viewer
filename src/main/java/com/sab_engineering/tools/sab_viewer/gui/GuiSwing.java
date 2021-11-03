@@ -52,7 +52,7 @@ public class GuiSwing {
     private JTextArea textArea;
 
     public GuiSwing() {
-        this.uiListener = new ViewerController().getViewerListener(); // if we every need to store direct access to controller, then we can change the way it is done here
+        this.uiListener = new ViewerController(); // if we every need to store direct access to controller, then we can change the way it is done here
         linesExchanger = new LinesExchanger();
         prepareGui();
     }
