@@ -11,12 +11,11 @@ import java.io.UncheckedIOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.Semaphore;
 import java.util.function.Consumer;
 
 public class ViewerController implements ViewerUiListener {
-    private Optional<String> maybeFilename;
+    private final String fileName;
 
     private final int currentlyDisplayedLines = 50; // TODO: This should be changed on window resize (for now it is final just to disable warning)
     private final int currentlyDisplayedColumns = 150;
@@ -34,68 +33,28 @@ public class ViewerController implements ViewerUiListener {
 
     private Reader reader;
 
-    private Consumer<MessageInfo> messageConsumer;
-    private IOException scannerException = null;
+    private final Consumer<MessageInfo> messageConsumer;
+    private final Thread scannerThread;
 
-    public ViewerController() {
+    public ViewerController(final String fileName, final Consumer<Collection<LineContent>> linesConsumer, final Consumer<MessageInfo> messageConsumer) {
         firstDisplayedLineIndex = 0;
         firstDisplayedColumnIndex = 0;
         initialLinesLock = new Semaphore(1);
         initialLines_toBeAccessedLocked = new ArrayList<>(currentlyDisplayedLines);
         lineStatistics_toBeAccessedSynchronized = new ArrayList<>(100000);
-    }
 
-    public void openFile(final String fileName, final Consumer<Collection<LineContent>> linesConsumer, final Consumer<MessageInfo> messageConsumer) {
-
-        // TODO: We need to handle the case, that it is subsequent "open", so we need to cancel current operations and clean the buffer before start scanning
-        // OR just interrupt and then dump the entire Controller and create a new one
-
-        this.maybeFilename = Optional.of(fileName);
+        this.fileName = fileName;
         this.messageConsumer = messageConsumer;
-        Thread scannerThread = new Thread(
-                () -> {
-                    try {
-                        Scanner.scanFile(fileName, this::addInitialContent, currentlyDisplayedColumns, this::addLineStatistics);
-                    } catch (IOException ioException) {
-                        clearInitialContent();
-                        scannerException = ioException;
-                    }
-                },
-                "Scanner"
-        );
+        scannerThread = new Thread(() -> scanFile(linesConsumer), "Scanner");
         scannerThread.start();
-
-        final List<LineContent> initialLinesRead = new ArrayList<>();
-        while (scannerThread.isAlive() || (initialLinesRead.size() < currentlyDisplayedLines && initialLines_toBeAccessedLocked != null)) {
-            try {
-                initialLinesLock.acquire();
-                try {
-                    while (initialLines_toBeAccessedLocked != null && initialLinesRead.size() < initialLines_toBeAccessedLocked.size()) {
-                        final LineContent newLine = initialLines_toBeAccessedLocked.get(initialLinesRead.size());
-                        initialLinesRead.add(newLine);
-                        linesConsumer.accept(new ArrayList<>(initialLinesRead));
-                    }
-                } finally {
-                    initialLinesLock.release();
-                }
-                //noinspection BusyWait
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-                scannerThread.interrupt();
-            }
-        }
-
-        if (scannerException != null) {
-            throw displayAndCreateException(scannerException, "scan");
-        }
     }
 
-    public void update(final Consumer<Collection<LineContent>> linesConsumer) {
+    @Override
+    public void interruptBackgroundThreads() {
+        scannerThread.interrupt();
+    }
 
-        if (maybeFilename.isEmpty()) {
-            return;
-        }
-        final String fileName = maybeFilename.get();
+    private void update(final Consumer<Collection<LineContent>> linesConsumer) {
 
         clearInitialContent();
 
@@ -123,6 +82,16 @@ public class ViewerController implements ViewerUiListener {
         linesConsumer.accept(lineContents);
     }
 
+    // this method is supposed to be executed in scannerThread
+    private void scanFile(final Consumer<Collection<LineContent>> lineConsumer) {
+        try {
+            Scanner.scanFile(fileName, lineContent -> addInitialContent(lineContent, lineConsumer), currentlyDisplayedColumns, this::addLineStatistics);
+        } catch (IOException ioException) {
+            clearInitialContent();
+            // TODO: We need here also exception consumer - to make it possible to report the exception in GUI
+        }
+    }
+
     // prevent further updates by scanner
     private void clearInitialContent() {
         if (initialLines_toBeAccessedLocked != null) {
@@ -139,16 +108,21 @@ public class ViewerController implements ViewerUiListener {
         }
     }
 
-    private void addInitialContent(LineContent lineContent) {
+    private void addInitialContent(final LineContent lineContent, final Consumer<Collection<LineContent>> lineConsumer) {
         if (initialLines_toBeAccessedLocked != null) {
             try {
+                    List<LineContent> contentCopyOrNull = null;
                     initialLinesLock.acquire();
                     try {
                         if (initialLines_toBeAccessedLocked != null && initialLines_toBeAccessedLocked.size() < currentlyDisplayedLines) {
                             initialLines_toBeAccessedLocked.add(lineContent);
+                            contentCopyOrNull = new ArrayList<>(initialLines_toBeAccessedLocked);
                         }
                     } finally {
                         initialLinesLock.release();
+                    }
+                    if (contentCopyOrNull != null) {
+                        lineConsumer.accept(contentCopyOrNull);
                     }
             } catch (InterruptedException e) {
                 throw new IllegalStateException("Unable to get content lock", e);
@@ -177,14 +151,9 @@ public class ViewerController implements ViewerUiListener {
     }
 
     private UncheckedIOException displayAndCreateException(IOException exception, String verb)  {
-        String message = "Unable to " + verb + " file '" + maybeFilename + "': " + exception.getClass().getSimpleName();
+        String message = "Unable to " + verb + " file '" + fileName + "': " + exception.getClass().getSimpleName();
         messageConsumer.accept(new MessageInfo("Unable to " + verb + " file", message, JOptionPane.ERROR_MESSAGE));
         return new UncheckedIOException(message, exception);
-    }
-
-    @Override
-    public void onOpenFile(final String filePath, final Consumer<Collection<LineContent>> linesConsumer, final Consumer<MessageInfo> messageConsumer) {
-        openFile(filePath, linesConsumer, messageConsumer);
     }
 
     @Override

@@ -45,21 +45,23 @@ public class GuiSwing {
     public static final String AMK_GO_ONE_PAGE_LEFT = "go_one_page_left";
     public static final String AMK_GO_ONE_PAGE_RIGHT = "go_one_page_right";
 
-    private final ViewerUiListener uiListener;
+    private Optional<ViewerUiListener> uiListener;
     private final LinesExchanger linesExchanger;
 
     private JFrame frame;
     private JTextArea textArea;
 
-    public GuiSwing() {
-        this.uiListener = new ViewerController(); // if we every need to store direct access to controller, then we can change the way it is done here
+    public GuiSwing(final Optional<String> maybeFilePath) {
+        uiListener = Optional.empty();
         linesExchanger = new LinesExchanger();
         prepareGui();
+        frame.setVisible(true);
+        maybeFilePath.ifPresent(this::openFile);
     }
 
-    public void start(final Optional<String> maybeFilePath) {
-        frame.setVisible(true);
-        maybeFilePath.ifPresent(filePath -> uiListener.onOpenFile(filePath, this::updateLines, this::showMessageDialog));
+    public void openFile(final String filePath) {
+        uiListener.ifPresent(ViewerUiListener::interruptBackgroundThreads);
+        uiListener = Optional.of(new ViewerController(filePath, this::updateLines, this::showMessageDialog));
     }
 
     private void setLines(final Collection<LineContent> lines) {
@@ -78,7 +80,7 @@ public class GuiSwing {
     // TODO: probably we can pass directly lineExchanger::setLines as a callback
     // supposed to be called from other thread
     public void updateLines(final Collection<LineContent> lines) {
-        linesExchanger.setLines(lines); // called from the worker thread
+        linesExchanger.setLines(lines); // called from the worker thread. Is synchronized
         SwingUtilities.invokeLater(
                 () -> linesExchanger.consumeLines(this::setLines) // called from the GUI thread (queued in the GUI event loop)
         );
@@ -90,7 +92,7 @@ public class GuiSwing {
         final int result = fileChooser.showOpenDialog(frame);
         if (result == JFileChooser.APPROVE_OPTION) {
             final File selectedFile = fileChooser.getSelectedFile();
-            uiListener.onOpenFile(selectedFile.getPath(), this::updateLines, this::showMessageDialog);
+            openFile(selectedFile.getPath());
         }
     }
 
@@ -163,97 +165,97 @@ public class GuiSwing {
         textArea.getActionMap().put(AMK_GO_ONE_LINE_UP, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoOneLineUp(GuiSwing.this::updateLines);
+                uiListener.ifPresent(listener -> listener.onGoOneLineUp(GuiSwing.this::updateLines));
             }
         });
         textArea.getActionMap().put(AMK_GO_ONE_PAGE_UP, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoOnePageUp(GuiSwing.this::updateLines);
+                uiListener.ifPresent(listener -> listener.onGoOnePageUp(GuiSwing.this::updateLines));
             }
         });
         textArea.getActionMap().put(AMK_GO_ONE_LINE_DOWN, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoOneLineDown(GuiSwing.this::updateLines);
+                uiListener.ifPresent(listener -> listener.onGoOneLineDown(GuiSwing.this::updateLines));
             }
         });
         textArea.getActionMap().put(AMK_GO_ONE_PAGE_DOWN, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoOnePageDown(GuiSwing.this::updateLines);
+                uiListener.ifPresent(listener -> listener.onGoOnePageDown(GuiSwing.this::updateLines));
             }
         });
         textArea.getActionMap().put(AMK_GO_ONE_COLUMN_LEFT, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoOneColumnLeft(GuiSwing.this::updateLines);
+                uiListener.ifPresent(listener -> listener.onGoOneColumnLeft(GuiSwing.this::updateLines));
             }
         });
         textArea.getActionMap().put(AMK_GO_ONE_COLUMN_RIGHT, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoOneColumnRight(GuiSwing.this::updateLines);
+                uiListener.ifPresent(listener -> listener.onGoOneColumnRight(GuiSwing.this::updateLines));
             }
         });
         textArea.getActionMap().put(AMK_GO_TO_LINE_BEGIN, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoToLineBegin(GuiSwing.this::updateLines);
+                uiListener.ifPresent(listener -> listener.onGoToLineBegin(GuiSwing.this::updateLines));
             }
         });
         textArea.getActionMap().put(AMK_GO_TO_LINE_END, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoToLineEnd(GuiSwing.this::updateLines);
+                uiListener.ifPresent(listener -> listener.onGoToLineEnd(GuiSwing.this::updateLines));
             }
         });
         textArea.getActionMap().put(AMK_GO_TO_FIST_LINE, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoToFirstLine(GuiSwing.this::updateLines);
+                uiListener.ifPresent(listener -> listener.onGoToFirstLine(GuiSwing.this::updateLines));
             }
         });
         textArea.getActionMap().put(AMK_GO_TO_LAST_LINE, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoToLastLine(GuiSwing.this::updateLines);
+                uiListener.ifPresent(listener -> listener.onGoToLastLine(GuiSwing.this::updateLines));
             }
         });
         textArea.getActionMap().put(AMK_LARGE_JUMP_UP, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onLargeJumpUp(GuiSwing.this::updateLines);
+                uiListener.ifPresent(listener -> listener.onLargeJumpUp(GuiSwing.this::updateLines));
             }
         });
         textArea.getActionMap().put(AMK_LARGE_JUMP_DOWN, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onLargeJumpDown(GuiSwing.this::updateLines);
+                uiListener.ifPresent(listener -> listener.onLargeJumpDown(GuiSwing.this::updateLines));
             }
         });
         textArea.getActionMap().put(AMK_LARGE_JUMP_LEFT, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onLargeJumpLeft(GuiSwing.this::updateLines);
+                uiListener.ifPresent(listener -> listener.onLargeJumpLeft(GuiSwing.this::updateLines));
             }
         });
         textArea.getActionMap().put(AMK_LARGE_JUMP_RIGHT, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onLargeJumpRight(GuiSwing.this::updateLines);
+                uiListener.ifPresent(listener -> listener.onLargeJumpRight(GuiSwing.this::updateLines));
             }
         });
         textArea.getActionMap().put(AMK_GO_ONE_PAGE_LEFT, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoOnePageLeft(GuiSwing.this::updateLines);
+                uiListener.ifPresent(listener -> listener.onGoOnePageLeft(GuiSwing.this::updateLines));
             }
         });
         textArea.getActionMap().put(AMK_GO_ONE_PAGE_RIGHT, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.onGoOnePageRight(GuiSwing.this::updateLines);
+                uiListener.ifPresent(listener -> listener.onGoOnePageRight(GuiSwing.this::updateLines));
             }
         });
         textArea.getActionMap().put(AMK_OPEN_FILE, new ActionStub() {
@@ -265,20 +267,23 @@ public class GuiSwing {
     }
 
     private void handleGoTo(String result) {
+        if (uiListener.isEmpty()) {
+            return;
+        }
         if (result.contains(":")) {
             String[] address = result.split(":");
             if (address.length == 2) {
                 if (address[0].matches("^\\d+$") && address[1].matches("^\\d+$")) {
                     int line = Integer.parseInt(address[0]) - 1;
                     int column = Integer.parseInt(address[1]) - 1;
-                    uiListener.onGoTo(line, column, GuiSwing.this::updateLines);
+                    uiListener.get().onGoTo(line, column, GuiSwing.this::updateLines);
 
                     return;
                 }
             }
         } else if (result.matches("^\\d+$")) {
             int line = Integer.parseInt(result) - 1;
-            uiListener.onGoTo(line, 0, GuiSwing.this::updateLines);
+            uiListener.get().onGoTo(line, 0, GuiSwing.this::updateLines);
 
             return;
         }

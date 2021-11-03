@@ -15,9 +15,6 @@ import java.util.function.Consumer;
  */
 public interface ViewerUiListener {
 
-    // Open file
-    void onOpenFile(final String filePath, final Consumer<Collection<LineContent>> linesConsumer, final Consumer<MessageInfo> messageConsumer);
-
     // Navigation
     void onGoOneLineUp(final Consumer<Collection<LineContent>> linesConsumer);
     void onGoOneLineDown(final Consumer<Collection<LineContent>> linesConsumer);
@@ -36,4 +33,6 @@ public interface ViewerUiListener {
     void onLargeJumpLeft(final Consumer<Collection<LineContent>> linesConsumer);
     void onLargeJumpRight(final Consumer<Collection<LineContent>> linesConsumer);
     void onGoTo(final int line, final int column, final Consumer<Collection<LineContent>> linesConsumer);
+
+    void interruptBackgroundThreads();
 }
