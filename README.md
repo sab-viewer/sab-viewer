@@ -12,7 +12,6 @@ It should open and be usable quickly, even when opening text files that are mult
 * Add print-outs/logging, with statistics about performance: size of file, time to scan it, time to seek etc... Or maybe put it into GUI
 * support specification of encoding to open file
 * maybe support auto detection of encoding
-* support weird kinds of line endings that nobody should use (Windows, MacOS classic)
 * support simple search (jump to next, done in separate thread, can be canceled, if takes long)
 * support more advanced search (make list, remember multiple search results etc.)
 * handle tabs (\t) correctly in fixed width views (count them as multiple characters 
