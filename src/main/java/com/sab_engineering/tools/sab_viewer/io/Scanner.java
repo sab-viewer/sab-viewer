@@ -24,6 +24,7 @@ public class Scanner {
             CharsetEncoder charsetEncoder = charset.newEncoder();
             CharBuffer encodeInputBuffer = CharBuffer.allocate(1);
             ByteBuffer encodedChar = ByteBuffer.allocate(Math.round(charsetEncoder.maxBytesPerChar() + 0.5f));
+            int[] characterSizesInBytes = new int[Character.MAX_VALUE + 1];
 
             long positionInBytes = 0;
 
@@ -62,22 +63,27 @@ public class Scanner {
                     characterNumberInLine++;
 
                     // determine byte size of the character
-                    encodedChar.clear();
-                    encodeInputBuffer.clear();
+                    if (characterSizesInBytes[currentCharactersIntValue] != 0) {
+                        positionInBytes += characterSizesInBytes[currentCharactersIntValue];
+                    } else {
+                        encodedChar.clear();
+                        encodeInputBuffer.clear();
 
-                    encodeInputBuffer.put(0, currentCharacter);
+                        encodeInputBuffer.put(0, currentCharacter);
 
-                    charsetEncoder.reset();
-                    CoderResult encodingResult = charsetEncoder.encode(encodeInputBuffer, encodedChar, true);
-                    if (!encodingResult.isUnderflow()) {
-                        throw new IllegalStateException("Unable to determine byte size of character " + currentCharacter + " in " + charset.displayName());
+                        charsetEncoder.reset();
+                        CoderResult encodingResult = charsetEncoder.encode(encodeInputBuffer, encodedChar, true);
+                        if (!encodingResult.isUnderflow()) {
+                            throw new IllegalStateException("Unable to determine byte size of character " + currentCharacter + " in " + charset.displayName());
+                        }
+                        charsetEncoder.flush(encodedChar);
+                        if (!encodingResult.isUnderflow()) {
+                            throw new IllegalStateException("Unable to determine byte size of character " + currentCharacter + " in " + charset.displayName());
+                        }
+
+                        characterSizesInBytes[currentCharactersIntValue] = encodedChar.position();
+                        positionInBytes += encodedChar.position();
                     }
-                    charsetEncoder.flush(encodedChar);
-                    if (!encodingResult.isUnderflow()) {
-                        throw new IllegalStateException("Unable to determine byte size of character " + currentCharacter + " in " + charset.displayName());
-                    }
-
-                    positionInBytes += encodedChar.position();
                 } else /* EOF */ {
                     if (characterPositionEveryNCharactersInBytes.size() > 0) {
                         if (characterNumberInLine <= numberOfVisibleCharactersPerLine) {
