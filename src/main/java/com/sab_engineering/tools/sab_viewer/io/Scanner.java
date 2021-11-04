@@ -3,56 +3,58 @@ package com.sab_engineering.tools.sab_viewer.io;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
+import java.util.ArrayList;
 import java.util.function.Consumer;
 
 public class Scanner {
-    private static final int BUFFER_SIZE = 4096;
 
-    public static void scanFile(String fileName, Consumer<LineContent> lineListener, int numberOfVisibleCharactersPerLine, Consumer<LineStatistics> statisticsListener) throws IOException {
+    public static void scanFile(String fileName, Charset charset, Consumer<LineContent> lineListener, int numberOfVisibleCharactersPerLine, Consumer<LineStatistics> statisticsListener) throws IOException {
         try (
                 InputStream inputStream = Files.newInputStream(Paths.get(fileName), StandardOpenOption.READ);
-                InputStreamReader inputReader = new InputStreamReader(inputStream, StandardCharsets.UTF_8);
+                InputStreamReader inputReader = new InputStreamReader(inputStream, charset);
         ){
-            char[] buffer = new char[BUFFER_SIZE];
             char[] lineBuffer = new char[numberOfVisibleCharactersPerLine];
             long position = 0;
-            long positionOfLastNewLineStart = 0;
-            int positionInLine = 0;
-            int charsRead;
+            final ArrayList<Long> characterPositionEveryNCharactersInBytes = new ArrayList<>();
+            long positionInLine = 0;
+            char lastCharacter = '\0';
+            int currentCharactersIntValue;
             do {
-                charsRead = inputReader.read(buffer);
-                char lastCharacter = '\0';
-                for (int positionInBuffer = 0; positionInBuffer < charsRead; positionInBuffer++, positionInLine++, position++) {
-                    char currentCharacter = buffer[positionInBuffer];
+                currentCharactersIntValue = inputReader.read();
+                if (currentCharactersIntValue > 0) {
+                    if (positionInLine % IoConstants.NUMBER_OF_CHARACTERS_PER_BYTE_POSITION == 0) {
+                        characterPositionEveryNCharactersInBytes.add(position);
+                    }
+                    char currentCharacter = (char) currentCharactersIntValue;
                     if (currentCharacter == '\n' || currentCharacter == '\r') {
                         // when windows line ending is detected here, The line was already finished and published at the \r, so we just reset the counts to drop the \n
                         if (lastCharacter != '\r' || currentCharacter != '\n') {
                             if (positionInLine <= numberOfVisibleCharactersPerLine) {
-                                lineListener.accept(new LineContent(new String(lineBuffer, 0, positionInLine)));
+                                lineListener.accept(new LineContent(new String(lineBuffer, 0, (int) positionInLine)));
                             }
-                            statisticsListener.accept(new LineStatistics(positionOfLastNewLineStart, positionInLine));
+                            statisticsListener.accept(new LineStatistics(characterPositionEveryNCharactersInBytes.stream().mapToLong(Long::longValue).toArray(), positionInLine, positionInLine));
                         }
-                        positionOfLastNewLineStart = position + 1;
+                        characterPositionEveryNCharactersInBytes.clear();
                         positionInLine = -1;
                     } else if (positionInLine < numberOfVisibleCharactersPerLine) {
-                        lineBuffer[positionInLine] = currentCharacter;
+                        lineBuffer[(int) positionInLine] = currentCharacter;
                     } else if (positionInLine == numberOfVisibleCharactersPerLine) {
-                        lineListener.accept(new LineContent(new String(lineBuffer, 0, positionInLine)));
+                        lineListener.accept(new LineContent(new String(lineBuffer, 0, (int) positionInLine)));
                     }
                     lastCharacter = currentCharacter;
+                    positionInLine++;
+                    position++;
+                } else /* EOF */ {
+                    if (positionInLine <= numberOfVisibleCharactersPerLine) {
+                        lineListener.accept(new LineContent(new String(lineBuffer, 0, (int) positionInLine)));
+                    }
+                    statisticsListener.accept(new LineStatistics(characterPositionEveryNCharactersInBytes.stream().mapToLong(Long::longValue).toArray(), positionInLine, positionInLine));
                 }
-            } while (charsRead != -1);
-
-            if (positionInLine > 0) {
-                if (positionInLine <= numberOfVisibleCharactersPerLine) {
-                    lineListener.accept(new LineContent(new String(lineBuffer, 0, positionInLine)));
-                }
-                statisticsListener.accept(new LineStatistics(positionOfLastNewLineStart, positionInLine));
-            }
+            } while (currentCharactersIntValue != -1);
         }
     }
 }

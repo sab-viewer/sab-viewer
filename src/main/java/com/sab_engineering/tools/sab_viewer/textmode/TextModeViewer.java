@@ -7,6 +7,8 @@ import com.sab_engineering.tools.sab_viewer.io.Scanner;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Vector;
 
@@ -22,10 +24,11 @@ public class TextModeViewer {
 
     @SuppressWarnings("BusyWait")
     public static void view(String fileName) {
+        Charset charset = StandardCharsets.UTF_8;
         Thread scannerThread = new Thread(
                 () -> {
                     try {
-                        Scanner.scanFile(fileName, TextModeViewer::offer, COLUMNS, LINE_STATISTICS::add);
+                        Scanner.scanFile(fileName, charset, TextModeViewer::offer, COLUMNS, LINE_STATISTICS::add);
                     } catch (IOException ioException) {
                         scannerException = ioException;
                     }
@@ -55,7 +58,7 @@ public class TextModeViewer {
 
         try {
             if (LINE_STATISTICS.size() > ROWS) {
-                Reader reader = new Reader(fileName);
+                Reader reader = new Reader(fileName, charset);
                 List<LineContent> lineContents = reader.readSpecificLines(LINE_STATISTICS.subList(LINE_STATISTICS.size() / 2 - 5, LINE_STATISTICS.size() / 2 + 5), 10, COLUMNS);
                 System.out.println("=============Middle lines, starting from column 10 =============");
                 for (LineContent lineContent : lineContents) {
@@ -72,7 +75,7 @@ public class TextModeViewer {
             throw new UncheckedIOException("Unable to read file '" + fileName + "': " + ioException.getClass().getSimpleName(), ioException);
         }
 
-        System.out.println("File " + fileName + " contained " + LINE_STATISTICS.size() + " lines with " + LINE_STATISTICS.stream().mapToLong(LineStatistics::getLength).sum() + " characters (excluding new line characters)");
+        System.out.println("File " + fileName + " contained " + LINE_STATISTICS.size() + " lines with " + LINE_STATISTICS.stream().mapToLong(LineStatistics::getLengthInBytes).sum() + " characters (excluding new line characters)");
     }
 
     private static void offer(LineContent lineContent) {

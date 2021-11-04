@@ -8,6 +8,8 @@ import com.sab_engineering.tools.sab_viewer.io.Scanner;
 import javax.swing.JOptionPane;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -15,6 +17,7 @@ import java.util.concurrent.Semaphore;
 import java.util.function.Consumer;
 
 public class ViewerController implements ViewerUiListener {
+    private final Charset charset = StandardCharsets.UTF_8;
     private final String fileName;
 
     private final int currentlyDisplayedLines = 50; // TODO: This should be changed on window resize (for now it is final just to disable warning)
@@ -73,7 +76,7 @@ public class ViewerController implements ViewerUiListener {
         final List<LineContent> lineContents;
         try {
             if (reader == null) {
-                reader = new Reader(fileName);
+                reader = new Reader(fileName, charset);
             }
             lineContents = reader.readSpecificLines(linesToRead, firstDisplayedColumnIndex, currentlyDisplayedColumns);
         } catch (IOException ioException) {
@@ -85,7 +88,7 @@ public class ViewerController implements ViewerUiListener {
     // this method is supposed to be executed in scannerThread
     private void scanFile(final Consumer<Collection<LineContent>> lineConsumer) {
         try {
-            Scanner.scanFile(fileName, lineContent -> addInitialContent(lineContent, lineConsumer), currentlyDisplayedColumns, this::addLineStatistics);
+            Scanner.scanFile(fileName, charset, lineContent -> addInitialContent(lineContent, lineConsumer), currentlyDisplayedColumns, this::addLineStatistics);
         } catch (IOException ioException) {
             clearInitialContent();
             // TODO: We need here also exception consumer - to make it possible to report the exception in GUI
@@ -210,7 +213,7 @@ public class ViewerController implements ViewerUiListener {
             }
         }
         if (statisticOfCurrentLine != null) {
-            moveToPosition(firstDisplayedLineIndex, statisticOfCurrentLine.getLength() - currentlyDisplayedColumns, linesConsumer);
+            moveToPosition(firstDisplayedLineIndex, statisticOfCurrentLine.getLengthInBytes() - currentlyDisplayedColumns, linesConsumer);
         }
     }
 
