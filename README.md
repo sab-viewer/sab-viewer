@@ -10,6 +10,8 @@ It should open and be usable quickly, even when opening text files that are mult
 * Support switching between Java and System look-and-feel
 * Add scrollbars
 * Support scrolling with mouse wheel (also shift + wheel to scroll left, right)
+* Do we need to handle navigation is special way while scanning is still in progress? 
+  E.g. Should we prohibit using CTRL+END or should it just jump to the latest scanned line?
 * Add print-outs/logging, with statistics about performance: size of file, time to scan it, time to seek etc... Or maybe put it into GUI
 * support specification of encoding to open file
 * maybe support auto detection of encoding
