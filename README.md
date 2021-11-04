@@ -7,6 +7,7 @@ It should open and be usable quickly, even when opening text files that are mult
 * Fix handling of exception in scanner thread. (What do we actually want to happen there?)
 * support resizing of the text area
 * Add status bar in GUI that shows "scanning...", updating count of line/characters, current position
+* Support switching between Java and System look-and-feel
 * Add scrollbars
 * Support scrolling with mouse wheel (also shift + wheel to scroll left, right)
 * Add print-outs/logging, with statistics about performance: size of file, time to scan it, time to seek etc... Or maybe put it into GUI
@@ -36,3 +37,4 @@ It should open and be usable quickly, even when opening text files that are mult
 * fix scrolling, so that it does not skip updates (seems to be not relevant
   for now with new reader... but probably it will be with bigger files)
 * find a way to make scrolling work smoother even at the end of the file
+* Do we need to persist any settings? Working dir, look-and-feel something else?
