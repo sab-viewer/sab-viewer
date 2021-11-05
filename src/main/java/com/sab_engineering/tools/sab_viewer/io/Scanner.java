@@ -25,18 +25,24 @@ public class Scanner {
             CharsetDecoder charsetDecoder = charset.newDecoder();
             charsetDecoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
 
-            ByteBuffer readBuffer = ByteBuffer.allocate(IoConstants.NUMBER_OF_CHARACTERS_PER_BYTE_POSITION);
-            CharBuffer decodeBuffer = CharBuffer.allocate(1);
+            final ByteBuffer readBuffer = ByteBuffer.allocate(IoConstants.NUMBER_OF_BYTES_TO_READ_IN_SCANNER);
+            final CharBuffer opportunisticDecodeBuffer = CharBuffer.allocate(IoConstants.NUMBER_OF_BYTES_TO_DECODE_OPPORTUNISTICALLY);
+            final CharBuffer fallbackDecodeBuffer = CharBuffer.allocate(1);
 
             long positionInBytes = 0;
+            long positionInBytesToStartOpportunisticEncoding = 0;
             int numberOfLinesRead = 0;
+            int numberOfLinesPublished = 0;
 
             final ArrayList<Long> characterPositionEveryNCharactersInBytes = new ArrayList<>();
+            long decodeFallbackCharacterPositionsSize;
 
             char[] lineBuffer = new char[numberOfVisibleCharactersPerLine];
             long characterNumberInLine = 0;
+            long decodeFallbackCharacterNumberInLine;
 
             char lastCharacter = '\0';
+            char decodeFallbackLastCharacter;
 
             int bytesRead;
             do {
@@ -45,52 +51,91 @@ public class Scanner {
                 if (readBuffer.hasRemaining()) {
                     boolean continueDecoding = true;
                     do {
-                        boolean getLastCharacter = false;
+                        boolean getLastCharacters = false;
+
+                        decodeFallbackCharacterPositionsSize = characterPositionEveryNCharactersInBytes.size();
+                        decodeFallbackCharacterNumberInLine = characterNumberInLine;
+                        decodeFallbackLastCharacter = lastCharacter;
+
                         int readBufferPositionBeforeDecode = readBuffer.position();
+
+                        CharBuffer decodeBuffer;
+                        if (positionInBytes < positionInBytesToStartOpportunisticEncoding) {
+                            decodeBuffer = fallbackDecodeBuffer;
+                        } else {
+                            decodeBuffer = opportunisticDecodeBuffer;
+                        }
+                        decodeBuffer.clear();
+                        int remainingCharactersBeforeMarker = IoConstants.NUMBER_OF_CHARACTERS_PER_BYTE_POSITION - (int) (characterNumberInLine % IoConstants.NUMBER_OF_CHARACTERS_PER_BYTE_POSITION);
+                        decodeBuffer.limit(Math.min(decodeBuffer.capacity(), remainingCharactersBeforeMarker));
+
                         CoderResult decodeResult = charsetDecoder.decode(readBuffer, decodeBuffer, false);
                         if (decodeResult == CoderResult.UNDERFLOW && bytesRead == -1) {
                             decodeResult = charsetDecoder.decode(readBuffer, decodeBuffer, true);
-                            getLastCharacter = true;
+                            getLastCharacters = true;
                             continueDecoding = false;
                         }
-                        if (decodeResult == CoderResult.OVERFLOW || (decodeResult == CoderResult.UNDERFLOW && getLastCharacter)) {
-                            if (characterNumberInLine % IoConstants.NUMBER_OF_CHARACTERS_PER_BYTE_POSITION == 0) {
-                                characterPositionEveryNCharactersInBytes.add(positionInBytes);
-                            }
+                        if (decodeResult == CoderResult.OVERFLOW || (decodeResult == CoderResult.UNDERFLOW && getLastCharacters)) {
                             decodeBuffer.flip();
-                            char currentCharacter = decodeBuffer.get();
-                            decodeBuffer.clear();
 
-                            if (currentCharacter == '\n' || currentCharacter == '\r') {
-                                // when windows line ending is detected here, The line was already finished and published at the \r, so we just reset the counts to drop the \n
-                                if (lastCharacter != '\r' || currentCharacter != '\n') {
-                                    if (numberOfLinesRead < numberOfInitialLines && characterNumberInLine <= numberOfVisibleCharactersPerLine) {
+                            boolean containsMultiByteCharacters = decodeBuffer.limit() < readBuffer.position() - readBufferPositionBeforeDecode;
+
+                            int decodedCharacters = 0;
+                            while (decodeBuffer.hasRemaining()) {
+                                if (characterNumberInLine % IoConstants.NUMBER_OF_CHARACTERS_PER_BYTE_POSITION == 0) {
+                                    characterPositionEveryNCharactersInBytes.add(positionInBytes + decodedCharacters);
+                                }
+                                char currentCharacter = decodeBuffer.get();
+
+                                if (currentCharacter == '\n' || currentCharacter == '\r') {
+                                    if (containsMultiByteCharacters && decodeBuffer == opportunisticDecodeBuffer) {
+                                        // mark next position to try again
+                                        positionInBytesToStartOpportunisticEncoding = (positionInBytes - decodedCharacters) + readBuffer.position() - readBufferPositionBeforeDecode;
+
+                                        // perform reset
+                                        readBuffer.position(readBufferPositionBeforeDecode);
+                                        while (characterPositionEveryNCharactersInBytes.size() > decodeFallbackCharacterPositionsSize) {
+                                            characterPositionEveryNCharactersInBytes.remove(characterPositionEveryNCharactersInBytes.size() - 1);
+                                        }
+                                        characterNumberInLine = decodeFallbackCharacterNumberInLine;
+                                        lastCharacter = decodeFallbackLastCharacter;
+                                        break;
+                                    }
+                                    long lineEndPositionInBytes = positionInBytes + decodedCharacters;
+
+                                    // when windows line ending is detected here, The line was already finished and published at the \r, so we just reset the counts to drop the \n
+                                    if (lastCharacter != '\r' || currentCharacter != '\n') {
+                                        if (numberOfLinesRead < numberOfInitialLines && characterNumberInLine <= numberOfVisibleCharactersPerLine) {
+                                            lineListener.accept(new LineContent(new String(lineBuffer, 0, (int) characterNumberInLine)));
+                                            numberOfLinesPublished++;
+                                        }
+                                        long[] characterPositionsInBytes = characterPositionEveryNCharactersInBytes.stream().mapToLong(Long::longValue).toArray();
+                                        statisticsListener.accept(new LineStatistics(characterPositionsInBytes, lineEndPositionInBytes - characterPositionsInBytes[0], characterNumberInLine));
+                                        numberOfLinesRead++;
+                                        if (numberOfLinesRead > 0 && numberOfLinesRead % 25000 == 0) {
+                                            printStats(startTimestamp, lineEndPositionInBytes, numberOfLinesRead, "read");
+                                        }
+                                    }
+                                    characterPositionEveryNCharactersInBytes.clear();
+                                    characterNumberInLine = -1;
+                                } else if (numberOfLinesRead < numberOfInitialLines && numberOfLinesPublished == numberOfLinesRead) {
+                                    if (characterNumberInLine < numberOfVisibleCharactersPerLine) {
+                                        lineBuffer[(int) characterNumberInLine] = currentCharacter;
+                                    } else if (characterNumberInLine == numberOfVisibleCharactersPerLine) {
                                         lineListener.accept(new LineContent(new String(lineBuffer, 0, (int) characterNumberInLine)));
-                                    }
-                                    long[] characterPositionsInBytes = characterPositionEveryNCharactersInBytes.stream().mapToLong(Long::longValue).toArray();
-                                    statisticsListener.accept(new LineStatistics(characterPositionsInBytes, positionInBytes - characterPositionsInBytes[0], characterNumberInLine));
-                                    numberOfLinesRead++;
-                                    if (numberOfLinesRead > 0 && numberOfLinesRead % 25000 == 0) {
-                                        printStats(startTimestamp, positionInBytes, numberOfLinesRead, "read");
+                                        numberOfLinesPublished++;
                                     }
                                 }
-                                characterPositionEveryNCharactersInBytes.clear();
-                                characterNumberInLine = -1;
-                            } else if (numberOfLinesRead < numberOfInitialLines) {
-                                if (characterNumberInLine < numberOfVisibleCharactersPerLine) {
-                                    lineBuffer[(int) characterNumberInLine] = currentCharacter;
-                                } else if (characterNumberInLine == numberOfVisibleCharactersPerLine) {
-                                    lineListener.accept(new LineContent(new String(lineBuffer, 0, (int) characterNumberInLine)));
-                                }
+                                lastCharacter = currentCharacter;
+                                characterNumberInLine++;
+                                decodedCharacters++;
                             }
-                            lastCharacter = currentCharacter;
-                            characterNumberInLine++;
-                            positionInBytes += readBuffer.position() - readBufferPositionBeforeDecode;
+                            positionInBytes += (readBuffer.position() - readBufferPositionBeforeDecode);
 
                         } else {
                             throw new IllegalStateException("Unexpected decoder result " + decodeResult.toString());
                         }
-                        if (readBuffer.limit() - readBuffer.position() < 10 && bytesRead != -1) {
+                        if (readBuffer.limit() - readBuffer.position() <= IoConstants.NUMBER_OF_BYTES_TO_DECODE_OPPORTUNISTICALLY && bytesRead != -1) {
                             readBuffer.compact();
                             continueDecoding = false;
                         }

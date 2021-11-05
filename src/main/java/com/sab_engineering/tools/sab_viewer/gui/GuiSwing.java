@@ -267,7 +267,7 @@ public class GuiSwing {
     }
 
     private void handleGoTo(String result) {
-        if (uiListener.isEmpty()) {
+        if (!uiListener.isPresent()) {
             return;
         }
         if (result.contains(":")) {
