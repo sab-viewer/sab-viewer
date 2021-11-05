@@ -21,6 +21,8 @@ public class Scanner {
                 InputStream inputStream = Files.newInputStream(Paths.get(fileName), StandardOpenOption.READ);
                 InputStreamReader inputReader = new InputStreamReader(inputStream, charset);
         ){
+            long startTimestamp = System.currentTimeMillis();
+
             CharsetEncoder charsetEncoder = charset.newEncoder();
             CharBuffer encodeInputBuffer = CharBuffer.allocate(1);
             ByteBuffer encodedChar = ByteBuffer.allocate(Math.round(charsetEncoder.maxBytesPerChar() + 0.5f));
@@ -94,6 +96,11 @@ public class Scanner {
                     }
                 }
             } while (currentCharactersIntValue != -1);
+
+            long timePassedInMs = System.currentTimeMillis() - startTimestamp;
+            double timePassedInSeconds = timePassedInMs / 1000.0;
+            double mBytesPerSecond = positionInBytes / (1024 * 1024 * timePassedInSeconds);
+            System.out.printf("Scanner finished in %.2f seconds. Read speed was %.2f MB/s", timePassedInSeconds, mBytesPerSecond);
         }
     }
 }

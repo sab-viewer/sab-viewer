@@ -21,10 +21,12 @@ public class Reader implements Closeable {
     }
 
     public List<LineContent> readSpecificLines(List<LineStatistics> linesToReadOrderedByStartPositionInFile, long offsetFromBeginningOfLineInCharacters, int numberOfVisibleCharactersPerLine) throws IOException {
+        long startTimestamp = System.currentTimeMillis();
+
         if (offsetFromBeginningOfLineInCharacters < 0) {
             throw new IllegalStateException("Negative offsets are not supported: " + offsetFromBeginningOfLineInCharacters);
         }
-        System.out.println(System.currentTimeMillis() + " read starts");
+
         List<LineContent> resultingLines = new ArrayList<>(linesToReadOrderedByStartPositionInFile.size());
         for (LineStatistics lineStatistics : linesToReadOrderedByStartPositionInFile) {
             if (offsetFromBeginningOfLineInCharacters >= lineStatistics.getLengthInCharacters()) {
@@ -54,7 +56,10 @@ public class Reader implements Closeable {
                 resultingLines.add(new LineContent(charactersRead));
             }
         }
-        System.out.println(System.currentTimeMillis() + " read ends");
+
+        long timePassedInMs = 1 + System.currentTimeMillis() - startTimestamp;
+        System.out.println("Reader finished in less than " + timePassedInMs + "ms");
+
         return resultingLines;
     }
 
