@@ -28,7 +28,7 @@ public class TextModeViewer {
         Thread scannerThread = new Thread(
                 () -> {
                     try {
-                        Scanner.scanFile(fileName, charset, TextModeViewer::offer, COLUMNS, LINE_STATISTICS::add);
+                        Scanner.scanFile(fileName, charset, LINE_CONTENTS::add, ROWS, COLUMNS, LINE_STATISTICS::add);
                     } catch (IOException ioException) {
                         scannerException = ioException;
                     }
@@ -78,9 +78,4 @@ public class TextModeViewer {
         System.out.println("File " + fileName + " contained " + LINE_STATISTICS.size() + " lines with " + LINE_STATISTICS.stream().mapToLong(LineStatistics::getLengthInBytes).sum() + " characters (excluding new line characters)");
     }
 
-    private static void offer(LineContent lineContent) {
-        if (LINE_CONTENTS.size() < ROWS) {
-            LINE_CONTENTS.add(lineContent);
-        }
-    }
 }

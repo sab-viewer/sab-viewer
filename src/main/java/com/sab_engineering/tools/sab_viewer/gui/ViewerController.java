@@ -88,7 +88,7 @@ public class ViewerController implements ViewerUiListener {
     // this method is supposed to be executed in scannerThread
     private void scanFile(final Consumer<Collection<LineContent>> lineConsumer) {
         try {
-            Scanner.scanFile(fileName, charset, lineContent -> addInitialContent(lineContent, lineConsumer), currentlyDisplayedColumns, this::addLineStatistics);
+            Scanner.scanFile(fileName, charset, lineContent -> addInitialContent(lineContent, lineConsumer), currentlyDisplayedLines, currentlyDisplayedColumns, this::addLineStatistics);
         } catch (IOException ioException) {
             clearInitialContent();
             // TODO: We need here also exception consumer - to make it possible to report the exception in GUI
@@ -117,7 +117,7 @@ public class ViewerController implements ViewerUiListener {
                     List<LineContent> contentCopyOrNull = null;
                     initialLinesLock.acquire();
                     try {
-                        if (initialLines_toBeAccessedLocked != null && initialLines_toBeAccessedLocked.size() < currentlyDisplayedLines) {
+                        if (initialLines_toBeAccessedLocked != null) {
                             initialLines_toBeAccessedLocked.add(lineContent);
                             contentCopyOrNull = new ArrayList<>(initialLines_toBeAccessedLocked);
                         }
