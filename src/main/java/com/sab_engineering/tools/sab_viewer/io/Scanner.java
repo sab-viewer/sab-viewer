@@ -44,15 +44,13 @@ public class Scanner {
             char lastCharacter = '\0';
             char decodeFallbackLastCharacter;
 
-            int bytesRead;
+            boolean byteChannelIsAtEOF;
             do {
-                bytesRead = seekableByteChannel.read(readBuffer);
+                int bytesRead = seekableByteChannel.read(readBuffer);
+                byteChannelIsAtEOF = bytesRead == -1;
                 readBuffer.flip();
                 if (readBuffer.hasRemaining()) {
-                    boolean continueDecoding = true;
                     do {
-                        boolean getLastCharacters = false;
-
                         decodeFallbackCharacterPositionsSize = characterPositionEveryNCharactersInBytes.size();
                         decodeFallbackCharacterNumberInLine = characterNumberInLine;
                         decodeFallbackLastCharacter = lastCharacter;
@@ -69,13 +67,8 @@ public class Scanner {
                         int remainingCharactersBeforeMarker = IoConstants.NUMBER_OF_CHARACTERS_PER_BYTE_POSITION - (int) (characterNumberInLine % IoConstants.NUMBER_OF_CHARACTERS_PER_BYTE_POSITION);
                         decodeBuffer.limit(Math.min(decodeBuffer.capacity(), remainingCharactersBeforeMarker));
 
-                        CoderResult decodeResult = charsetDecoder.decode(readBuffer, decodeBuffer, false);
-                        if (decodeResult == CoderResult.UNDERFLOW && bytesRead == -1) {
-                            decodeResult = charsetDecoder.decode(readBuffer, decodeBuffer, true);
-                            getLastCharacters = true;
-                            continueDecoding = false;
-                        }
-                        if (decodeResult == CoderResult.OVERFLOW || (decodeResult == CoderResult.UNDERFLOW && getLastCharacters)) {
+                        CoderResult decodeResult = charsetDecoder.decode(readBuffer, decodeBuffer, byteChannelIsAtEOF);
+                        if (decodeResult == CoderResult.OVERFLOW || (decodeResult == CoderResult.UNDERFLOW && byteChannelIsAtEOF)) {
                             decodeBuffer.flip();
 
                             boolean containsMultiByteCharacters = decodeBuffer.limit() < readBuffer.position() - readBufferPositionBeforeDecode;
@@ -135,13 +128,10 @@ public class Scanner {
                         } else {
                             throw new IllegalStateException("Unexpected decoder result " + decodeResult.toString());
                         }
-                        if (readBuffer.limit() - readBuffer.position() <= IoConstants.NUMBER_OF_BYTES_TO_DECODE_OPPORTUNISTICALLY && bytesRead != -1) {
-                            readBuffer.compact();
-                            continueDecoding = false;
-                        }
-                    } while (continueDecoding);
+                    } while (readBuffer.hasRemaining() && (byteChannelIsAtEOF || bufferHasEnoughBytesToNotUnderflowDuringDecode(readBuffer)));
+                    readBuffer.compact();
                 }
-            } while (bytesRead != -1 || readBuffer.hasRemaining());
+            } while (!byteChannelIsAtEOF || readBuffer.hasRemaining());
 
             if (characterPositionEveryNCharactersInBytes.size() > 0) {
                 if (numberOfLinesRead < numberOfInitialLines && characterNumberInLine <= numberOfVisibleCharactersPerLine) {
@@ -149,10 +139,15 @@ public class Scanner {
                 }
                 long[] characterPositionsInBytes = characterPositionEveryNCharactersInBytes.stream().mapToLong(Long::longValue).toArray();
                 statisticsListener.accept(new LineStatistics(characterPositionsInBytes, positionInBytes - characterPositionsInBytes[0], characterNumberInLine));
+                numberOfLinesRead++;
             }
 
             printStats(startTimestamp, positionInBytes, numberOfLinesRead, "finished reading");
         }
+    }
+
+    private static boolean bufferHasEnoughBytesToNotUnderflowDuringDecode(ByteBuffer readBuffer) {
+        return (readBuffer.limit() - readBuffer.position()) > (IoConstants.NUMBER_OF_BYTES_TO_DECODE_OPPORTUNISTICALLY * 3);
     }
 
     private static void printStats(long startTimestamp, long positionInBytes, int numberOfLinesRead, String currentState) {
