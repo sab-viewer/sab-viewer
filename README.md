@@ -4,13 +4,13 @@ This project is aimed to develop a viewer for large text files.
 It should open and be usable quickly, even when opening text files that are multiple GBs in size.
 
 ## TODO ##
-* Fix handling of exception in scanner thread. (What do we actually want to happen there?)
+* Fix handling of exception in scanner thread. (Show in UI and also on console - maybe via logger)
 * support resizing of the text area
 * Add status bar in GUI that shows "scanning...", updating count of line/characters, current position
 * Support switching between Java and System look-and-feel
 * Add scrollbars
 * Support scrolling with mouse wheel (also shift + wheel to scroll left, right)
-* Do we need to handle navigation is special way while scanning is still in progress? 
+* Do we need to handle navigation special while scanning is still in progress? 
   E.g. Should we prohibit using CTRL+END or should it just jump to the latest scanned line?
 * Add print-outs/logging, with statistics about performance: size of file, time to scan it, time to seek etc... Or maybe put it into GUI
 * support specification of encoding to open file
@@ -27,11 +27,6 @@ It should open and be usable quickly, even when opening text files that are mult
 * provide TUI (to make it usable via SSH).
 * probably provide mode "with cursor"
 * probably support work with binary files (e.g. hex view, search)
-* maybe implement cashing of bigger area around the visible window
-  (to make work with neighbour text smoother). If we do it, we probably
-  need to implement pagination to be able to "learn"/"forget" parts of
-  text in pieces.
-* Reader works on Byte level, but scanner not. This will cause issues when using multi byte encodings.
 * test with very long lines (GB long)
 * Test with very large files. Probably ~100Gb
 * Do we need it?: Make "read" run async (think, how to do it in smart way, so that we don't oversubscribe both:
