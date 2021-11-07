@@ -19,11 +19,8 @@ import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
 import java.util.Optional;
-import java.util.function.Consumer;
 
 public class GuiSwing {
 
@@ -46,22 +43,22 @@ public class GuiSwing {
     public static final String AMK_GO_ONE_PAGE_RIGHT = "go_one_page_right";
 
     private Optional<ViewerUiListener> uiListener;
-    private final LinesExchanger linesExchanger;
 
     private JFrame frame;
     private JTextArea textArea;
 
     public GuiSwing(final Optional<String> maybeFilePath) {
         uiListener = Optional.empty();
-        linesExchanger = new LinesExchanger();
         prepareGui();
         frame.setVisible(true);
         maybeFilePath.ifPresent(this::openFile);
     }
 
     public void openFile(final String filePath) {
-        uiListener.ifPresent(ViewerUiListener::interruptBackgroundThreads);
+        Optional<ViewerUiListener> oldUiListener = uiListener;
         uiListener = Optional.of(new ViewerController(filePath, this::updateLines, this::showMessageDialog));
+
+        oldUiListener.ifPresent(ViewerUiListener::interruptBackgroundThreads);
     }
 
     private void setLines(final Collection<LineContent> lines) {
@@ -77,12 +74,10 @@ public class GuiSwing {
         textArea.setText(text.toString());
     }
 
-    // TODO: probably we can pass directly lineExchanger::setLines as a callback
     // supposed to be called from other thread
     public void updateLines(final Collection<LineContent> lines) {
-        linesExchanger.setLines(lines); // called from the worker thread. Is synchronized
         SwingUtilities.invokeLater(
-                () -> linesExchanger.consumeLines(this::setLines) // called from the GUI thread (queued in the GUI event loop)
+                () -> this.setLines(lines)
         );
     }
 
@@ -323,23 +318,6 @@ public class GuiSwing {
         @Override
         public void removePropertyChangeListener(PropertyChangeListener listener) {
 
-        }
-    }
-
-    private static class LinesExchanger {
-        boolean newLinesWereWritten = false;
-        List<LineContent> lines;
-
-        public synchronized void setLines(final Collection<LineContent> newLines) {
-            lines = new ArrayList<>(newLines);
-            newLinesWereWritten = true;
-        }
-
-        public synchronized void consumeLines(final Consumer<List<LineContent>> linesConsumer) {
-            if (newLinesWereWritten) {
-                newLinesWereWritten = false;
-                linesConsumer.accept(lines);
-            }
         }
     }
 }

@@ -13,7 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 public class ViewerController implements ViewerUiListener {
@@ -29,8 +29,8 @@ public class ViewerController implements ViewerUiListener {
     private int firstDisplayedLineIndex; // index in lineStatistics
     private long firstDisplayedColumnIndex;
 
-    private final Semaphore initialLinesLock;
-    private List<LineContent> initialLines_toBeAccessedLocked;
+    private final AtomicBoolean initialLinesStillRelevant;
+    private final List<LineContent> initialLines_toBeAccessedSynchronized;
 
     private final List<LineStatistics> lineStatistics_toBeAccessedSynchronized;
 
@@ -42,8 +42,8 @@ public class ViewerController implements ViewerUiListener {
     public ViewerController(final String fileName, final Consumer<Collection<LineContent>> linesConsumer, final Consumer<MessageInfo> messageConsumer) {
         firstDisplayedLineIndex = 0;
         firstDisplayedColumnIndex = 0;
-        initialLinesLock = new Semaphore(1);
-        initialLines_toBeAccessedLocked = new ArrayList<>(currentlyDisplayedLines);
+        initialLinesStillRelevant = new AtomicBoolean(true);
+        initialLines_toBeAccessedSynchronized = new ArrayList<>(currentlyDisplayedLines);
         lineStatistics_toBeAccessedSynchronized = new ArrayList<>(100000);
 
         this.fileName = fileName;
@@ -58,8 +58,7 @@ public class ViewerController implements ViewerUiListener {
     }
 
     private void update(final Consumer<Collection<LineContent>> linesConsumer) {
-
-        clearInitialContent();
+        initialLinesStillRelevant.set(false);
 
         List<LineStatistics> linesToRead;
         synchronized (lineStatistics_toBeAccessedSynchronized) {
@@ -90,45 +89,19 @@ public class ViewerController implements ViewerUiListener {
         try {
             Scanner.scanFile(fileName, charset, lineContent -> addInitialContent(lineContent, lineConsumer), currentlyDisplayedLines, currentlyDisplayedColumns, this::addLineStatistics);
         } catch (IOException ioException) {
-            clearInitialContent();
-            // TODO: We need here also exception consumer - to make it possible to report the exception in GUI
-        }
-    }
-
-    // prevent further updates by scanner
-    private void clearInitialContent() {
-        if (initialLines_toBeAccessedLocked != null) {
-            try {
-                initialLinesLock.acquire();
-                try {
-                    initialLines_toBeAccessedLocked = null;
-                } finally {
-                    initialLinesLock.release();
-                }
-            } catch (InterruptedException e) {
-                throw new IllegalStateException("Unable to get content lock", e);
-            }
+            initialLinesStillRelevant.set(false);
+            throw displayAndCreateException(ioException, "scan");
         }
     }
 
     private void addInitialContent(final LineContent lineContent, final Consumer<Collection<LineContent>> lineConsumer) {
-        if (initialLines_toBeAccessedLocked != null) {
-            try {
-                    List<LineContent> contentCopyOrNull = null;
-                    initialLinesLock.acquire();
-                    try {
-                        if (initialLines_toBeAccessedLocked != null) {
-                            initialLines_toBeAccessedLocked.add(lineContent);
-                            contentCopyOrNull = new ArrayList<>(initialLines_toBeAccessedLocked);
-                        }
-                    } finally {
-                        initialLinesLock.release();
-                    }
-                    if (contentCopyOrNull != null) {
-                        lineConsumer.accept(contentCopyOrNull);
-                    }
-            } catch (InterruptedException e) {
-                throw new IllegalStateException("Unable to get content lock", e);
+        if (initialLinesStillRelevant.get()) {
+            synchronized (initialLines_toBeAccessedSynchronized) {
+                initialLines_toBeAccessedSynchronized.add(lineContent);
+                ArrayList<LineContent> contents = new ArrayList<>(initialLines_toBeAccessedSynchronized);
+                if (initialLinesStillRelevant.get()) {
+                    lineConsumer.accept(contents);
+                }
             }
         }
     }

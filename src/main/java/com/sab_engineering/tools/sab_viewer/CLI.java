@@ -10,26 +10,28 @@ import java.util.Optional;
 
 public class CLI {
     public static void main(String[] args) {
-        if (args.length != 1 && args.length != 2) {
-            System.err.println("You need to pass file name as first parameter");
+        if (args.length > 2) {
+            System.err.println("May pass file name as first parameter");
             System.err.println("Or '--textMode' as first and file name as second parameter");
             System.exit(-1);
         }
 
         boolean textMode = false;
         String fileName;
-        if ("--textMode".equals(args[0])) {
+        if (args.length == 2 && "--textMode".equals(args[0])) {
             textMode = true;
             fileName = args[1];
-        } else {
+        } else if (args.length > 0){
             fileName = args[0];
+        } else {
+            fileName = null;
         }
 
         try {
             if (textMode) {
                 TextModeViewer.view(fileName);
             } else {
-                SwingUtilities.invokeAndWait(() -> new GuiSwing(Optional.of(fileName)));
+                SwingUtilities.invokeAndWait(() -> new GuiSwing(Optional.ofNullable(fileName)));
             }
         } catch (Exception e) {
             String message = e.getMessage();
