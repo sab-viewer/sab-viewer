@@ -34,5 +34,7 @@ public interface ViewerUiListener {
     void onLargeJumpRight(final Consumer<Collection<LineContent>> linesConsumer);
     void onGoTo(final int line, final int column, final Consumer<Collection<LineContent>> linesConsumer);
 
+    void resize(final int displayedLines, final int displayedColumns, final Consumer<Collection<LineContent>> linesConsumer);
+
     void interruptBackgroundThreads();
 }

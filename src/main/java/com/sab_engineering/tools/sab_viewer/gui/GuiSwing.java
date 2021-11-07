@@ -13,8 +13,12 @@ import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import java.awt.BorderLayout;
+import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.FontMetrics;
 import java.awt.event.ActionEvent;
+import java.awt.event.ComponentAdapter;
+import java.awt.event.ComponentEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.beans.PropertyChangeListener;
@@ -46,17 +50,39 @@ public class GuiSwing {
 
     private JFrame frame;
     private JTextArea textArea;
+    private final int widthPer10Chars;
+    private final int heightPerLine;
+    private int numberOfLinesToDisplay;
+    private int numberOfColumnsToDisplay;
 
     public GuiSwing(final Optional<String> maybeFilePath) {
         uiListener = Optional.empty();
         prepareGui();
         frame.setVisible(true);
-        maybeFilePath.ifPresent(this::openFile);
+        frame.pack();
+        frame.validate();
+        frame.repaint();
+        frame.pack();
+
+        FontMetrics fontMetrics = textArea.getGraphics().getFontMetrics(textArea.getFont());
+        widthPer10Chars = fontMetrics.stringWidth("10   chars");
+        heightPerLine = fontMetrics.getHeight();
+
+        // put size computation and starting of scanner to the end of GUI Queue
+        SwingUtilities.invokeLater(
+                () -> {
+                    computeSizeOfVisibleArea(textArea.getSize());
+
+                    addResizeListener();
+
+                    maybeFilePath.ifPresent(this::openFile);
+                }
+        );
     }
 
     public void openFile(final String filePath) {
         Optional<ViewerUiListener> oldUiListener = uiListener;
-        uiListener = Optional.of(new ViewerController(filePath, this::updateLines, this::showMessageDialog));
+        uiListener = Optional.of(new ViewerController(filePath, numberOfLinesToDisplay, numberOfColumnsToDisplay, this::updateLines, this::showMessageDialog));
 
         oldUiListener.ifPresent(ViewerUiListener::interruptBackgroundThreads);
     }
@@ -94,11 +120,11 @@ public class GuiSwing {
     private void prepareGui() {
         frame = new JFrame("SAB-Viewer");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-        frame.setSize(1000, 800); // TODO: This we need to calculate based on geometry and font size
 
         textArea = new JTextArea();
         textArea.setEditable(false);
         textArea.setFont(Font.decode(Font.MONOSPACED));
+        textArea.setPreferredSize(new Dimension(1000, 800));
 
         prepareActionMapOfTextArea(textArea);
         prepareInputMapOfTextArea(textArea);
@@ -132,6 +158,26 @@ public class GuiSwing {
 
         frame.getContentPane().add(BorderLayout.NORTH, menuBar);
         frame.getContentPane().add(BorderLayout.CENTER, textArea);
+    }
+
+    private void addResizeListener() {
+        textArea.addComponentListener(new ComponentAdapter() {
+            @Override
+            public void componentResized(ComponentEvent e) {
+                Dimension newSize = e.getComponent().getSize();
+                computeSizeOfVisibleArea(newSize);
+                uiListener.ifPresent(viewerUiListener -> viewerUiListener.resize(numberOfLinesToDisplay, numberOfColumnsToDisplay, GuiSwing.this::updateLines));
+            }
+            @Override
+            public void componentMoved(ComponentEvent e) {
+                // don't care
+            }
+        });
+    }
+
+    private void computeSizeOfVisibleArea(Dimension newSize) {
+        numberOfLinesToDisplay = Math.max(0, (int) Math.floor(newSize.getHeight() / heightPerLine));
+        numberOfColumnsToDisplay = Math.max(0,(int) Math.floor((10.0 * newSize.getWidth()) / widthPer10Chars));
     }
 
     private void prepareInputMapOfTextArea(final JTextArea textArea) {

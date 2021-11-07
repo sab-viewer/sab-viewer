@@ -20,11 +20,11 @@ public class ViewerController implements ViewerUiListener {
     private final Charset charset = StandardCharsets.UTF_8;
     private final String fileName;
 
-    private final int currentlyDisplayedLines = 50; // TODO: This should be changed on window resize (for now it is final just to disable warning)
-    private final int currentlyDisplayedColumns = 150;
+    private int currentlyDisplayedLines;
+    private int currentlyDisplayedColumns;
 
-    private final int largeLinesJump = currentlyDisplayedLines * 10; // TODO: Should be modifiable by user in settings
-    private final int largeColumnsJump = currentlyDisplayedColumns * 10;
+    private final int largeLinesJump = 500; // TODO: Should be modifiable by user in settings
+    private final int largeColumnsJump = 500;
 
     private int firstDisplayedLineIndex; // index in lineStatistics
     private long firstDisplayedColumnIndex;
@@ -39,9 +39,13 @@ public class ViewerController implements ViewerUiListener {
     private final Consumer<MessageInfo> messageConsumer;
     private final Thread scannerThread;
 
-    public ViewerController(final String fileName, final Consumer<Collection<LineContent>> linesConsumer, final Consumer<MessageInfo> messageConsumer) {
+    public ViewerController(final String fileName, final int displayedLines, final int displayedColumns, final Consumer<Collection<LineContent>> linesConsumer, final Consumer<MessageInfo> messageConsumer) {
         firstDisplayedLineIndex = 0;
         firstDisplayedColumnIndex = 0;
+
+        currentlyDisplayedLines = displayedLines;
+        currentlyDisplayedColumns = displayedColumns;
+
         initialLinesStillRelevant = new AtomicBoolean(true);
         initialLines_toBeAccessedSynchronized = new ArrayList<>(currentlyDisplayedLines);
         lineStatistics_toBeAccessedSynchronized = new ArrayList<>(100000);
@@ -55,6 +59,15 @@ public class ViewerController implements ViewerUiListener {
     @Override
     public void interruptBackgroundThreads() {
         scannerThread.interrupt();
+    }
+
+    @Override
+    public void resize(final int displayedLines, final int displayedColumns, final Consumer<Collection<LineContent>> linesConsumer) {
+        if (currentlyDisplayedLines != displayedLines || currentlyDisplayedColumns != displayedColumns) {
+            currentlyDisplayedLines = displayedLines;
+            currentlyDisplayedColumns = displayedColumns;
+            update(linesConsumer);
+        }
     }
 
     private void update(final Consumer<Collection<LineContent>> linesConsumer) {
@@ -186,7 +199,7 @@ public class ViewerController implements ViewerUiListener {
             }
         }
         if (statisticOfCurrentLine != null) {
-            moveToPosition(firstDisplayedLineIndex, statisticOfCurrentLine.getLengthInBytes() - currentlyDisplayedColumns, linesConsumer);
+            moveToPosition(firstDisplayedLineIndex, statisticOfCurrentLine.getLengthInCharacters() - currentlyDisplayedColumns, linesConsumer);
         }
     }
 
