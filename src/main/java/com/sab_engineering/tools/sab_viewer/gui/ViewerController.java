@@ -8,11 +8,13 @@ import com.sab_engineering.tools.sab_viewer.io.Scanner;
 import javax.swing.JOptionPane;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.nio.channels.ClosedByInterruptException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
@@ -34,10 +36,14 @@ public class ViewerController implements ViewerUiListener {
 
     private final List<LineStatistics> lineStatistics_toBeAccessedSynchronized;
 
-    private Reader reader;
 
     private final Consumer<MessageInfo> messageConsumer;
     private final Thread scannerThread;
+
+    private Reader reader;
+    private final Semaphore readerSignal; // <= this semaphore is used in 'reverse'. The reader waits/blocks on 'acquire' waiting for somebody to call 'release'. This avoids busy waits (in our code)
+    private Consumer<Collection<LineContent>> linesConsumerWaitingForReader;
+    private final Thread readerThread;
 
     public ViewerController(final String fileName, final int displayedLines, final int displayedColumns, final Consumer<Collection<LineContent>> linesConsumer, final Consumer<MessageInfo> messageConsumer) {
         firstDisplayedLineIndex = 0;
@@ -54,11 +60,18 @@ public class ViewerController implements ViewerUiListener {
         this.messageConsumer = messageConsumer;
         scannerThread = new Thread(() -> scanFile(linesConsumer), "Scanner");
         scannerThread.start();
+
+        readerSignal = new Semaphore(1);
+        readerSignal.acquireUninterruptibly();
+        this.linesConsumerWaitingForReader = null;
+        readerThread = new Thread(this::readFile, "Reader");
+        readerThread.start();
     }
 
     @Override
     public void interruptBackgroundThreads() {
         scannerThread.interrupt();
+        readerThread.interrupt();
     }
 
     @Override
@@ -66,7 +79,43 @@ public class ViewerController implements ViewerUiListener {
         if (currentlyDisplayedLines != displayedLines || currentlyDisplayedColumns != displayedColumns) {
             currentlyDisplayedLines = displayedLines;
             currentlyDisplayedColumns = displayedColumns;
-            update(linesConsumer);
+
+            requestUpdate(linesConsumer);
+        }
+    }
+
+    private void requestUpdate(final Consumer<Collection<LineContent>> linesConsumer){
+        linesConsumerWaitingForReader = linesConsumer;
+        readerSignal.release();
+    }
+
+    // this method is supposed to be executed in scannerThread
+    private void scanFile(final Consumer<Collection<LineContent>> lineConsumer) {
+        try {
+            Scanner.scanFile(fileName, charset, lineContent -> addInitialContent(lineContent, lineConsumer), currentlyDisplayedLines, currentlyDisplayedColumns, this::addLineStatistics);
+        } catch (ClosedByInterruptException interruptedException) {
+            initialLinesStillRelevant.set(false);
+            // scannerThread should end. Nothing more to do.
+        } catch (IOException ioException) {
+            initialLinesStillRelevant.set(false);
+            throw displayAndCreateException(ioException, "scan");
+        }
+    }
+
+    // this method is supposed to be executed in readerThread
+    private void readFile() {
+        try {
+            do {
+                readerSignal.acquire();
+                Consumer<Collection<LineContent>> linesConsumerWaitingForReader = this.linesConsumerWaitingForReader;
+                this.linesConsumerWaitingForReader = null;
+                if (linesConsumerWaitingForReader == null) {
+                    throw new IllegalStateException("Signaled to run reader, but nothing to do");
+                }
+                update(linesConsumerWaitingForReader);
+            } while (true);
+        } catch (InterruptedException interruptedException) {
+            // readerThread should end. Nothing more to do.
         }
     }
 
@@ -95,16 +144,6 @@ public class ViewerController implements ViewerUiListener {
             throw displayAndCreateException(ioException, "read");
         }
         linesConsumer.accept(lineContents);
-    }
-
-    // this method is supposed to be executed in scannerThread
-    private void scanFile(final Consumer<Collection<LineContent>> lineConsumer) {
-        try {
-            Scanner.scanFile(fileName, charset, lineContent -> addInitialContent(lineContent, lineConsumer), currentlyDisplayedLines, currentlyDisplayedColumns, this::addLineStatistics);
-        } catch (IOException ioException) {
-            initialLinesStillRelevant.set(false);
-            throw displayAndCreateException(ioException, "scan");
-        }
     }
 
     private void addInitialContent(final LineContent lineContent, final Consumer<Collection<LineContent>> lineConsumer) {
@@ -136,7 +175,7 @@ public class ViewerController implements ViewerUiListener {
     private void moveToPosition(final int firstDisplayedLineIndex, final long firstDisplayedColumnIndex, final Consumer<Collection<LineContent>> linesConsumer) {
         this.firstDisplayedLineIndex = Math.max(firstDisplayedLineIndex, 0);
         this.firstDisplayedColumnIndex = Math.max(firstDisplayedColumnIndex, 0);
-        update(linesConsumer);
+        requestUpdate(linesConsumer);
     }
 
     private UncheckedIOException displayAndCreateException(IOException exception, String verb)  {

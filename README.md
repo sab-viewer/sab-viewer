@@ -27,9 +27,5 @@ It should open and be usable quickly, even when opening text files that are mult
 * probably support work with binary files (e.g. hex view, search)
 * test with very long lines (GB long)
 * Test with very large files. Probably ~100Gb
-* Do we need it?: Make "read" run async (think, how to do it in smart way, so that we don't oversubscribe both:
-  "read" and "update" - skip intermediate request, which did not start yet).
-* fix scrolling, so that it does not skip updates (seems to be not relevant
-  for now with new reader... but probably it will be with bigger files)
-* find a way to make scrolling work smoother even at the end of the file
+* find a way to make scrolling work smoother
 * Do we need to persist any settings? Working dir, look-and-feel something else?
