@@ -24,6 +24,7 @@ public class Scanner {
 
             CharsetDecoder charsetDecoder = charset.newDecoder();
             charsetDecoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
+            charsetDecoder.onMalformedInput(CodingErrorAction.REPLACE);
 
             final ByteBuffer readBuffer = ByteBuffer.allocate(IoConstants.NUMBER_OF_BYTES_TO_READ_IN_SCANNER);
             final CharBuffer opportunisticDecodeBuffer = CharBuffer.allocate(IoConstants.NUMBER_OF_BYTES_TO_DECODE_OPPORTUNISTICALLY);

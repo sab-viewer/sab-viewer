@@ -48,6 +48,8 @@ public class GuiSwing {
 
     private Optional<ViewerUiListener> uiListener;
 
+    private String directoryFromSelection;
+
     private JFrame frame;
     private JTextArea textArea;
     private final int widthPer10Chars;
@@ -57,6 +59,8 @@ public class GuiSwing {
 
     public GuiSwing(final Optional<String> maybeFilePath) {
         uiListener = Optional.empty();
+        directoryFromSelection = null;
+
         prepareGui();
         frame.setVisible(true);
         frame.pack();
@@ -81,8 +85,14 @@ public class GuiSwing {
     }
 
     public void openFile(final String filePath) {
+        openFile(new File(filePath));
+    }
+
+    public void openFile(final File fileToOpen) {
+        directoryFromSelection = fileToOpen.getParentFile().getPath();
+
         Optional<ViewerUiListener> oldUiListener = uiListener;
-        uiListener = Optional.of(new ViewerController(filePath, numberOfLinesToDisplay, numberOfColumnsToDisplay, this::updateLines, this::showMessageDialog));
+        uiListener = Optional.of(new ViewerController(fileToOpen.getPath(), numberOfLinesToDisplay, numberOfColumnsToDisplay, this::updateLines, this::showMessageDialog));
 
         oldUiListener.ifPresent(ViewerUiListener::interruptBackgroundThreads);
     }
@@ -108,12 +118,11 @@ public class GuiSwing {
     }
 
     private void onOpenFile() {
-        final JFileChooser fileChooser = new JFileChooser();
-//                fileChooser.setCurrentDirectory(new File(System.getProperty("user.home")));
+        final JFileChooser fileChooser = new JFileChooser(directoryFromSelection);
         final int result = fileChooser.showOpenDialog(frame);
         if (result == JFileChooser.APPROVE_OPTION) {
             final File selectedFile = fileChooser.getSelectedFile();
-            openFile(selectedFile.getPath());
+            openFile(selectedFile);
         }
     }
 
