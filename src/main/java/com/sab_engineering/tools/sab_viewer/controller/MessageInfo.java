@@ -1,4 +1,4 @@
-package com.sab_engineering.tools.sab_viewer.gui;
+package com.sab_engineering.tools.sab_viewer.controller;
 
 public class MessageInfo {
     private final String title;

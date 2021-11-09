@@ -20,8 +20,6 @@ public class Scanner {
         try (
             SeekableByteChannel seekableByteChannel = Files.newByteChannel(Paths.get(fileName), StandardOpenOption.READ);
         ){
-            long startTimestamp = System.currentTimeMillis();
-
             CharsetDecoder charsetDecoder = charset.newDecoder();
             charsetDecoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
             charsetDecoder.onMalformedInput(CodingErrorAction.REPLACE);
@@ -106,9 +104,6 @@ public class Scanner {
                                         long[] characterPositionsInBytes = characterPositionEveryNCharactersInBytes.stream().mapToLong(Long::longValue).toArray();
                                         statisticsListener.accept(new LineStatistics(characterPositionsInBytes, lineEndPositionInBytes - characterPositionsInBytes[0], characterNumberInLine));
                                         numberOfLinesRead++;
-                                        if (numberOfLinesRead > 0 && numberOfLinesRead % 25000 == 0) {
-                                            printStats(startTimestamp, lineEndPositionInBytes, numberOfLinesRead, "read");
-                                        }
                                     }
                                     characterPositionEveryNCharactersInBytes.clear();
                                     characterNumberInLine = -1;
@@ -140,22 +135,11 @@ public class Scanner {
                 }
                 long[] characterPositionsInBytes = characterPositionEveryNCharactersInBytes.stream().mapToLong(Long::longValue).toArray();
                 statisticsListener.accept(new LineStatistics(characterPositionsInBytes, positionInBytes - characterPositionsInBytes[0], characterNumberInLine));
-                numberOfLinesRead++;
             }
-
-            printStats(startTimestamp, positionInBytes, numberOfLinesRead, "finished reading");
         }
     }
 
     private static boolean bufferHasEnoughBytesToNotUnderflowDuringDecode(ByteBuffer readBuffer) {
         return (readBuffer.limit() - readBuffer.position()) > (IoConstants.NUMBER_OF_BYTES_TO_DECODE_OPPORTUNISTICALLY * 3);
-    }
-
-    private static void printStats(long startTimestamp, long positionInBytes, int numberOfLinesRead, String currentState) {
-        long timePassedInMs = System.currentTimeMillis() - startTimestamp;
-        double timePassedInSeconds = timePassedInMs / 1000.0;
-        double mBytesPerSecond = positionInBytes / (1024 * 1024 * timePassedInSeconds);
-        System.out.printf("Scanner " + currentState + " " + numberOfLinesRead + " lines in %.2f seconds. Read speed was %.2f MB/s\n", timePassedInSeconds, mBytesPerSecond);
-        System.out.flush();
     }
 }

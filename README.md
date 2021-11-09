@@ -4,7 +4,6 @@ This project is aimed to develop a viewer for large text files.
 It should open and be usable quickly, even when opening text files that are multiple GBs in size.
 
 ## TODO ##
-* Add status bar in GUI that shows "scanning...", updating count of line/characters, current position
 * Support switching between Java and System look-and-feel
 * Add scrollbars
 * Support scrolling with mouse wheel (also shift + wheel to scroll left, right)

@@ -1,14 +1,21 @@
 package com.sab_engineering.tools.sab_viewer.gui;
 
+import com.sab_engineering.tools.sab_viewer.controller.MessageInfo;
+import com.sab_engineering.tools.sab_viewer.controller.ScannerState;
+import com.sab_engineering.tools.sab_viewer.controller.ViewerContent;
+import com.sab_engineering.tools.sab_viewer.controller.ViewerController;
+import com.sab_engineering.tools.sab_viewer.controller.ViewerUiListener;
 import com.sab_engineering.tools.sab_viewer.io.LineContent;
 
 import javax.swing.Action;
 import javax.swing.JFileChooser;
 import javax.swing.JFrame;
+import javax.swing.JLabel;
 import javax.swing.JMenu;
 import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
+import javax.swing.JPanel;
 import javax.swing.JTextArea;
 import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
@@ -47,6 +54,7 @@ public class GuiSwing {
     public static final String AMK_GO_ONE_PAGE_RIGHT = "go_one_page_right";
 
     private Optional<ViewerUiListener> uiListener;
+    private long uiListenerStartTimeStamp;
 
     private String directoryFromSelection;
 
@@ -56,6 +64,8 @@ public class GuiSwing {
     private final int heightPerLine;
     private int numberOfLinesToDisplay;
     private int numberOfColumnsToDisplay;
+    private JLabel currentPosition;
+    private JLabel scannerStatus;
 
     public GuiSwing(final Optional<String> maybeFilePath) {
         uiListener = Optional.empty();
@@ -89,10 +99,11 @@ public class GuiSwing {
     }
 
     public void openFile(final File fileToOpen) {
-        directoryFromSelection = fileToOpen.getParentFile().getPath();
+        directoryFromSelection = fileToOpen.getAbsoluteFile().getParentFile().getPath();
 
         Optional<ViewerUiListener> oldUiListener = uiListener;
-        uiListener = Optional.of(new ViewerController(fileToOpen.getPath(), numberOfLinesToDisplay, numberOfColumnsToDisplay, this::updateLines, this::showMessageDialog));
+        uiListenerStartTimeStamp = System.currentTimeMillis();
+        uiListener = Optional.of(new ViewerController(fileToOpen.getPath(), numberOfLinesToDisplay, numberOfColumnsToDisplay, this::updateLines, this::updateState, this::showMessageDialog));
 
         oldUiListener.ifPresent(ViewerUiListener::interruptBackgroundThreads);
     }
@@ -111,10 +122,33 @@ public class GuiSwing {
     }
 
     // supposed to be called from other thread
-    public void updateLines(final Collection<LineContent> lines) {
+    public void updateLines(final ViewerContent content) {
         SwingUtilities.invokeLater(
-                () -> this.setLines(lines)
+                () -> {
+                    this.setLines(content.getLines());
+                    this.currentPosition.setText(content.getFirstDisplayedLine() + ":" + content.getFirstDisplayedColumn());
+                }
         );
+    }
+
+    // supposed to be called from other thread
+    private void updateState(ScannerState scannerState) {
+        SwingUtilities.invokeLater(
+                () -> {
+                    String runningIndicator;
+                    String readSpeed;
+                    if (scannerState.isFinished()) {
+                        runningIndicator = "";
+                        readSpeed = "";
+                    } else {
+                        runningIndicator = "+";
+                        double timePassedInSeconds = (System.currentTimeMillis() - uiListenerStartTimeStamp) / 1000.0;
+                        readSpeed = String.format(" (%5.2f MB/s)", scannerState.getBytesScanned() / (1024 * 1024 * timePassedInSeconds));
+                    }
+                    this.scannerStatus.setText(" KB: " + scannerState.getBytesScanned() / 1024 + runningIndicator + readSpeed + "  Lines: " + scannerState.getLinesScanned() + runningIndicator);
+                }
+        );
+
     }
 
     private void onOpenFile() {
@@ -165,8 +199,15 @@ public class GuiSwing {
         navigateMenu.add(goToMenuItem);
         menuBar.add(navigateMenu);
 
+        JPanel statusBar = new JPanel(new BorderLayout());
+        currentPosition = new JLabel("1:1");
+        statusBar.add(currentPosition, BorderLayout.WEST);
+        scannerStatus = new JLabel("Bytes: 0+  Lines: 0+");
+        statusBar.add(scannerStatus, BorderLayout.EAST);
+
         frame.getContentPane().add(BorderLayout.NORTH, menuBar);
         frame.getContentPane().add(BorderLayout.CENTER, textArea);
+        frame.getContentPane().add(BorderLayout.SOUTH, statusBar);
     }
 
     private void addResizeListener() {

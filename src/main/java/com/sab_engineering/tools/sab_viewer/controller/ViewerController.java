@@ -1,4 +1,4 @@
-package com.sab_engineering.tools.sab_viewer.gui;
+package com.sab_engineering.tools.sab_viewer.controller;
 
 import com.sab_engineering.tools.sab_viewer.io.LineContent;
 import com.sab_engineering.tools.sab_viewer.io.LineStatistics;
@@ -12,7 +12,6 @@ import java.nio.channels.ClosedByInterruptException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -36,16 +35,16 @@ public class ViewerController implements ViewerUiListener {
 
     private final List<LineStatistics> lineStatistics_toBeAccessedSynchronized;
 
-
+    private final Consumer<ScannerState> stateConsumer;
     private final Consumer<MessageInfo> messageConsumer;
     private final Thread scannerThread;
 
     private Reader reader;
     private final Semaphore readerSignal; // <= this semaphore is used in 'reverse'. The reader waits/blocks on 'acquire' waiting for somebody to call 'release'. This avoids busy waits (in our code)
-    private Consumer<Collection<LineContent>> linesConsumerWaitingForReader;
+    private Consumer<ViewerContent> contentConsumerWaitingForReader;
     private final Thread readerThread;
 
-    public ViewerController(final String fileName, final int displayedLines, final int displayedColumns, final Consumer<Collection<LineContent>> linesConsumer, final Consumer<MessageInfo> messageConsumer) {
+    public ViewerController(final String fileName, final int displayedLines, final int displayedColumns, final Consumer<ViewerContent> contentConsumer, final Consumer<ScannerState> stateConsumer, final Consumer<MessageInfo> messageConsumer) {
         firstDisplayedLineIndex = 0;
         firstDisplayedColumnIndex = 0;
 
@@ -57,13 +56,14 @@ public class ViewerController implements ViewerUiListener {
         lineStatistics_toBeAccessedSynchronized = new ArrayList<>(100000);
 
         this.fileName = fileName;
+        this.stateConsumer = stateConsumer;
         this.messageConsumer = messageConsumer;
-        scannerThread = new Thread(() -> scanFile(linesConsumer), "Scanner");
+        scannerThread = new Thread(() -> scanFile(contentConsumer), "Scanner");
         scannerThread.start();
 
         readerSignal = new Semaphore(1);
         readerSignal.acquireUninterruptibly();
-        this.linesConsumerWaitingForReader = null;
+        this.contentConsumerWaitingForReader = null;
         readerThread = new Thread(this::readFile, "Reader");
         readerThread.start();
     }
@@ -75,24 +75,27 @@ public class ViewerController implements ViewerUiListener {
     }
 
     @Override
-    public void resize(final int displayedLines, final int displayedColumns, final Consumer<Collection<LineContent>> linesConsumer) {
+    public void resize(final int displayedLines, final int displayedColumns, final Consumer<ViewerContent> contentConsumer) {
         if (currentlyDisplayedLines != displayedLines || currentlyDisplayedColumns != displayedColumns) {
             currentlyDisplayedLines = displayedLines;
             currentlyDisplayedColumns = displayedColumns;
 
-            requestUpdate(linesConsumer);
+            requestUpdate(contentConsumer);
         }
     }
 
-    private void requestUpdate(final Consumer<Collection<LineContent>> linesConsumer){
-        linesConsumerWaitingForReader = linesConsumer;
+    private void requestUpdate(final Consumer<ViewerContent> contentConsumer){
+        contentConsumerWaitingForReader = contentConsumer;
         readerSignal.release();
     }
 
     // this method is supposed to be executed in scannerThread
-    private void scanFile(final Consumer<Collection<LineContent>> lineConsumer) {
+    private void scanFile(final Consumer<ViewerContent> contentConsumer) {
         try {
-            Scanner.scanFile(fileName, charset, lineContent -> addInitialContent(lineContent, lineConsumer), currentlyDisplayedLines, currentlyDisplayedColumns, this::addLineStatistics);
+            Scanner.scanFile(fileName, charset, lineContent -> addInitialContent(lineContent, contentConsumer), currentlyDisplayedLines, currentlyDisplayedColumns, this::updateStatistics);
+
+            LineStatistics lastStatistics = lineStatistics_toBeAccessedSynchronized.get(lineStatistics_toBeAccessedSynchronized.size() - 1);
+            stateConsumer.accept(new ScannerState(lineStatistics_toBeAccessedSynchronized.size(), lastStatistics.getCharacterPositionsInBytes()[0] + lastStatistics.getLengthInBytes(), true));
         } catch (ClosedByInterruptException interruptedException) {
             initialLinesStillRelevant.set(false);
             // scannerThread should end. Nothing more to do.
@@ -107,8 +110,8 @@ public class ViewerController implements ViewerUiListener {
         try {
             do {
                 readerSignal.acquire();
-                Consumer<Collection<LineContent>> linesConsumerWaitingForReader = this.linesConsumerWaitingForReader;
-                this.linesConsumerWaitingForReader = null;
+                Consumer<ViewerContent> linesConsumerWaitingForReader = this.contentConsumerWaitingForReader;
+                this.contentConsumerWaitingForReader = null;
                 if (linesConsumerWaitingForReader == null) {
                     throw new IllegalStateException("Signaled to run reader, but nothing to do");
                 }
@@ -119,7 +122,7 @@ public class ViewerController implements ViewerUiListener {
         }
     }
 
-    private void update(final Consumer<Collection<LineContent>> linesConsumer) {
+    private void update(final Consumer<ViewerContent> contentConsumer) {
         initialLinesStillRelevant.set(false);
 
         List<LineStatistics> linesToRead;
@@ -143,39 +146,44 @@ public class ViewerController implements ViewerUiListener {
         } catch (IOException ioException) {
             throw displayAndCreateException(ioException, "read");
         }
-        linesConsumer.accept(lineContents);
+        contentConsumer.accept(new ViewerContent(lineContents, firstDisplayedLineIndex + 1, firstDisplayedColumnIndex + 1));
     }
 
-    private void addInitialContent(final LineContent lineContent, final Consumer<Collection<LineContent>> lineConsumer) {
+    private void addInitialContent(final LineContent lineContent, final Consumer<ViewerContent> lineConsumer) {
         if (initialLinesStillRelevant.get()) {
             synchronized (initialLines_toBeAccessedSynchronized) {
                 initialLines_toBeAccessedSynchronized.add(lineContent);
                 ArrayList<LineContent> contents = new ArrayList<>(initialLines_toBeAccessedSynchronized);
                 if (initialLinesStillRelevant.get()) {
-                    lineConsumer.accept(contents);
+                    lineConsumer.accept(new ViewerContent(contents, 1, 1));
                 }
             }
         }
     }
 
-    private void addLineStatistics(final LineStatistics statistics) {
+    private void updateStatistics(final LineStatistics statistics) {
+        int numberOfLines;
         synchronized (lineStatistics_toBeAccessedSynchronized) {
             lineStatistics_toBeAccessedSynchronized.add(statistics);
+            numberOfLines = lineStatistics_toBeAccessedSynchronized.size();
+        }
+        if (numberOfLines % 5000 == 0) {
+            stateConsumer.accept(new ScannerState(numberOfLines, statistics.getCharacterPositionsInBytes()[0] + statistics.getLengthInBytes(), false));
         }
     }
 
-    private void moveVertical(final int lineOffset, final Consumer<Collection<LineContent>> linesConsumer) {
-        moveToPosition(firstDisplayedLineIndex + lineOffset, firstDisplayedColumnIndex, linesConsumer);
+    private void moveVertical(final int lineOffset, final Consumer<ViewerContent> contentConsumer) {
+        moveToPosition(firstDisplayedLineIndex + lineOffset, firstDisplayedColumnIndex, contentConsumer);
     }
 
-    private void moveHorizontal(final long columnOffset, final Consumer<Collection<LineContent>> linesConsumer) {
-        moveToPosition(firstDisplayedLineIndex, firstDisplayedColumnIndex + columnOffset, linesConsumer);
+    private void moveHorizontal(final long columnOffset, final Consumer<ViewerContent> contentConsumer) {
+        moveToPosition(firstDisplayedLineIndex, firstDisplayedColumnIndex + columnOffset, contentConsumer);
     }
 
-    private void moveToPosition(final int firstDisplayedLineIndex, final long firstDisplayedColumnIndex, final Consumer<Collection<LineContent>> linesConsumer) {
+    private void moveToPosition(final int firstDisplayedLineIndex, final long firstDisplayedColumnIndex, final Consumer<ViewerContent> contentConsumer) {
         this.firstDisplayedLineIndex = Math.max(firstDisplayedLineIndex, 0);
         this.firstDisplayedColumnIndex = Math.max(firstDisplayedColumnIndex, 0);
-        requestUpdate(linesConsumer);
+        requestUpdate(contentConsumer);
     }
 
     private UncheckedIOException displayAndCreateException(IOException exception, String verb)  {
@@ -185,52 +193,52 @@ public class ViewerController implements ViewerUiListener {
     }
 
     @Override
-    public void onGoOneLineUp(final Consumer<Collection<LineContent>> linesConsumer) {
-        moveVertical(-1, linesConsumer);
+    public void onGoOneLineUp(final Consumer<ViewerContent> contentConsumer) {
+        moveVertical(-1, contentConsumer);
     }
 
     @Override
-    public void onGoOneLineDown(final Consumer<Collection<LineContent>> linesConsumer) {
-        moveVertical(1, linesConsumer);
+    public void onGoOneLineDown(final Consumer<ViewerContent> contentConsumer) {
+        moveVertical(1, contentConsumer);
     }
 
     @Override
-    public void onGoOneColumnLeft(final Consumer<Collection<LineContent>> linesConsumer) {
-        moveHorizontal(-1, linesConsumer);
+    public void onGoOneColumnLeft(final Consumer<ViewerContent> contentConsumer) {
+        moveHorizontal(-1, contentConsumer);
     }
 
     @Override
-    public void onGoOneColumnRight(final Consumer<Collection<LineContent>> linesConsumer) {
-        moveHorizontal(1, linesConsumer);
+    public void onGoOneColumnRight(final Consumer<ViewerContent> contentConsumer) {
+        moveHorizontal(1, contentConsumer);
     }
 
     @Override
-    public void onGoOnePageUp(final Consumer<Collection<LineContent>> linesConsumer) {
-        moveVertical((currentlyDisplayedLines - 1) * -1, linesConsumer);
+    public void onGoOnePageUp(final Consumer<ViewerContent> contentConsumer) {
+        moveVertical((currentlyDisplayedLines - 1) * -1, contentConsumer);
     }
 
     @Override
-    public void onGoOnePageDown(final Consumer<Collection<LineContent>> linesConsumer) {
-        moveVertical(currentlyDisplayedLines - 1, linesConsumer);
+    public void onGoOnePageDown(final Consumer<ViewerContent> contentConsumer) {
+        moveVertical(currentlyDisplayedLines - 1, contentConsumer);
     }
 
     @Override
-    public void onGoOnePageLeft(final Consumer<Collection<LineContent>> linesConsumer) {
-        moveHorizontal((-1)*(currentlyDisplayedColumns - 1), linesConsumer);
+    public void onGoOnePageLeft(final Consumer<ViewerContent> contentConsumer) {
+        moveHorizontal((-1)*(currentlyDisplayedColumns - 1), contentConsumer);
     }
 
     @Override
-    public void onGoOnePageRight(final Consumer<Collection<LineContent>> linesConsumer) {
-        moveHorizontal(currentlyDisplayedColumns - 1, linesConsumer); // TODO: Do we need to stop it, when we reach end of line? which line?
+    public void onGoOnePageRight(final Consumer<ViewerContent> contentConsumer) {
+        moveHorizontal(currentlyDisplayedColumns - 1, contentConsumer); // TODO: Do we need to stop it, when we reach end of line? which line?
     }
 
     @Override
-    public void onGoToLineBegin(final Consumer<Collection<LineContent>> linesConsumer) {
-        moveToPosition(firstDisplayedLineIndex, 0, linesConsumer);
+    public void onGoToLineBegin(final Consumer<ViewerContent> contentConsumer) {
+        moveToPosition(firstDisplayedLineIndex, 0, contentConsumer);
     }
 
     @Override
-    public void onGoToLineEnd(final Consumer<Collection<LineContent>> linesConsumer) {
+    public void onGoToLineEnd(final Consumer<ViewerContent> contentConsumer) {
         LineStatistics statisticOfCurrentLine = null;
         synchronized (lineStatistics_toBeAccessedSynchronized) {
             if (lineStatistics_toBeAccessedSynchronized.size() > firstDisplayedLineIndex) {
@@ -238,46 +246,46 @@ public class ViewerController implements ViewerUiListener {
             }
         }
         if (statisticOfCurrentLine != null) {
-            moveToPosition(firstDisplayedLineIndex, statisticOfCurrentLine.getLengthInCharacters() - currentlyDisplayedColumns, linesConsumer);
+            moveToPosition(firstDisplayedLineIndex, statisticOfCurrentLine.getLengthInCharacters() - currentlyDisplayedColumns, contentConsumer);
         }
     }
 
     @Override
-    public void onGoToFirstLine(final Consumer<Collection<LineContent>> linesConsumer) {
-        moveToPosition(0, 0, linesConsumer);
+    public void onGoToFirstLine(final Consumer<ViewerContent> contentConsumer) {
+        moveToPosition(0, firstDisplayedColumnIndex, contentConsumer);
     }
 
     @Override
-    public void onGoToLastLine(final Consumer<Collection<LineContent>> linesConsumer) {
+    public void onGoToLastLine(final Consumer<ViewerContent> contentConsumer) {
         int line;
         synchronized (lineStatistics_toBeAccessedSynchronized) {
             line = Math.max(0, lineStatistics_toBeAccessedSynchronized.size() - currentlyDisplayedLines);
         }
-        moveToPosition(line, 0, linesConsumer);
+        moveToPosition(line, firstDisplayedColumnIndex, contentConsumer);
     }
 
     @Override
-    public void onGoTo(int firstDisplayedLineIndex, int firstDisplayedColumnIndex, Consumer<Collection<LineContent>> linesConsumer) {
-        moveToPosition(firstDisplayedLineIndex, firstDisplayedColumnIndex, linesConsumer);
+    public void onGoTo(int firstDisplayedLineIndex, int firstDisplayedColumnIndex, Consumer<ViewerContent> contentConsumer) {
+        moveToPosition(firstDisplayedLineIndex, firstDisplayedColumnIndex, contentConsumer);
     }
 
     @Override
-    public void onLargeJumpUp(final Consumer<Collection<LineContent>> linesConsumer) {
-        moveVertical((-1) * largeLinesJump, linesConsumer);
+    public void onLargeJumpUp(final Consumer<ViewerContent> contentConsumer) {
+        moveVertical((-1) * largeLinesJump, contentConsumer);
     }
 
     @Override
-    public void onLargeJumpDown(final Consumer<Collection<LineContent>> linesConsumer) {
-        moveVertical(largeLinesJump, linesConsumer);
+    public void onLargeJumpDown(final Consumer<ViewerContent> contentConsumer) {
+        moveVertical(largeLinesJump, contentConsumer);
     }
 
     @Override
-    public void onLargeJumpLeft(final Consumer<Collection<LineContent>> linesConsumer) {
-        moveHorizontal((-1) * largeColumnsJump, linesConsumer);
+    public void onLargeJumpLeft(final Consumer<ViewerContent> contentConsumer) {
+        moveHorizontal((-1) * largeColumnsJump, contentConsumer);
     }
 
     @Override
-    public void onLargeJumpRight(final Consumer<Collection<LineContent>> linesConsumer) {
-        moveHorizontal(largeColumnsJump, linesConsumer); // TODO: Do we need to stop it, when we reach end of line? which line?
+    public void onLargeJumpRight(final Consumer<ViewerContent> contentConsumer) {
+        moveHorizontal(largeColumnsJump, contentConsumer); // TODO: Do we need to stop it, when we reach end of line? which line?
     }
 }
