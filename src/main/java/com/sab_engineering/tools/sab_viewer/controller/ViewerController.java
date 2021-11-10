@@ -167,7 +167,7 @@ public class ViewerController implements ViewerUiListener {
             lineStatistics_toBeAccessedSynchronized.add(statistics);
             numberOfLines = lineStatistics_toBeAccessedSynchronized.size();
         }
-        if (numberOfLines % 5000 == 0) {
+        if ((numberOfLines < currentlyDisplayedLines && numberOfLines % 10 == 0) || numberOfLines % 5000 == 0) {
             stateConsumer.accept(new ScannerState(numberOfLines, statistics.getCharacterPositionsInBytes()[0] + statistics.getLengthInBytes(), false));
         }
     }
