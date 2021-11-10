@@ -126,7 +126,7 @@ public class GuiSwing {
         SwingUtilities.invokeLater(
                 () -> {
                     this.setLines(content.getLines());
-                    this.currentPosition.setText(content.getFirstDisplayedLine() + ":" + content.getFirstDisplayedColumn());
+                    this.currentPosition.setText(" " + content.getFirstDisplayedLine() + ":" + content.getFirstDisplayedColumn());
                 }
         );
     }
@@ -145,7 +145,7 @@ public class GuiSwing {
                         double timePassedInSeconds = (System.currentTimeMillis() - uiListenerStartTimeStamp) / 1000.0;
                         readSpeed = String.format(" (%5.2f MB/s)", scannerState.getBytesScanned() / (1024 * 1024 * timePassedInSeconds));
                     }
-                    this.scannerStatus.setText(" KB: " + scannerState.getBytesScanned() / 1024 + runningIndicator + readSpeed + "  Lines: " + scannerState.getLinesScanned() + runningIndicator);
+                    this.scannerStatus.setText(" KB: " + scannerState.getBytesScanned() / 1024 + runningIndicator + readSpeed + "  Lines: " + scannerState.getLinesScanned() + runningIndicator + " ");
                 }
         );
 
@@ -200,9 +200,9 @@ public class GuiSwing {
         menuBar.add(navigateMenu);
 
         JPanel statusBar = new JPanel(new BorderLayout());
-        currentPosition = new JLabel("1:1");
+        currentPosition = new JLabel(" 1:1");
         statusBar.add(currentPosition, BorderLayout.WEST);
-        scannerStatus = new JLabel("Bytes: 0+  Lines: 0+");
+        scannerStatus = new JLabel();
         statusBar.add(scannerStatus, BorderLayout.EAST);
 
         frame.getContentPane().add(BorderLayout.NORTH, menuBar);

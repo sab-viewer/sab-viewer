@@ -77,6 +77,7 @@ public class ViewerController implements ViewerUiListener {
     @Override
     public void resize(final int displayedLines, final int displayedColumns, final Consumer<ViewerContent> contentConsumer) {
         if (currentlyDisplayedLines != displayedLines || currentlyDisplayedColumns != displayedColumns) {
+            System.out.println("resize " + currentlyDisplayedLines + "x" + currentlyDisplayedColumns + " => " + displayedLines + "x" + displayedColumns);
             currentlyDisplayedLines = displayedLines;
             currentlyDisplayedColumns = displayedColumns;
 
