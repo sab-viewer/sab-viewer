@@ -49,7 +49,6 @@ public class GuiSwing {
     public static final String AMK_LARGE_JUMP_DOWN = "ctrl+down";
     public static final String AMK_LARGE_JUMP_LEFT = "ctrl+left";
     public static final String AMK_LARGE_JUMP_RIGHT = "ctrl+right";
-    public static final String AMK_OPEN_FILE = "ctrl+o";
     public static final String AMK_GO_ONE_PAGE_LEFT = "go_one_page_left";
     public static final String AMK_GO_ONE_PAGE_RIGHT = "go_one_page_right";
 
@@ -151,15 +150,6 @@ public class GuiSwing {
 
     }
 
-    private void onOpenFile() {
-        final JFileChooser fileChooser = new JFileChooser(directoryFromSelection);
-        final int result = fileChooser.showOpenDialog(frame);
-        if (result == JFileChooser.APPROVE_OPTION) {
-            final File selectedFile = fileChooser.getSelectedFile();
-            openFile(selectedFile);
-        }
-    }
-
     private void prepareGui() {
         frame = new JFrame("SAB-Viewer");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -172,32 +162,7 @@ public class GuiSwing {
         prepareActionMapOfTextArea(textArea);
         prepareInputMapOfTextArea(textArea);
 
-        JMenuBar menuBar = new JMenuBar();
-
-        JMenu fileMenu = new JMenu("File");
-        menuBar.add(fileMenu);
-
-        JMenuItem openMenuItem = new JMenuItem("Open");
-        fileMenu.add(openMenuItem);
-        openMenuItem.addActionListener(e -> onOpenFile());
-
-        JMenuItem goToMenuItem = new JMenuItem("GoTo");
-        goToMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_G, InputEvent.CTRL_DOWN_MASK));
-        goToMenuItem.addActionListener(actionEvent -> {
-            String result = (String)JOptionPane.showInputDialog(
-                    frame,
-                    "Enter Line[:Column]",
-                    "GoTo",
-                    JOptionPane.QUESTION_MESSAGE,
-                    null,
-                    null,
-                    "1:1"
-            );
-            handleGoTo(result);
-        });
-        JMenu navigateMenu = new JMenu("Navigate");
-        navigateMenu.add(goToMenuItem);
-        menuBar.add(navigateMenu);
+        JMenuBar menuBar = prepareMainMenu();
 
         JPanel statusBar = new JPanel(new BorderLayout());
         currentPosition = new JLabel(" 1:1");
@@ -208,6 +173,83 @@ public class GuiSwing {
         frame.getContentPane().add(BorderLayout.NORTH, menuBar);
         frame.getContentPane().add(BorderLayout.CENTER, textArea);
         frame.getContentPane().add(BorderLayout.SOUTH, statusBar);
+    }
+
+    private JMenuBar prepareMainMenu() {
+        final JMenuBar menuBar = new JMenuBar();
+
+        // File
+        final JMenu fileMenu = new JMenu("File");
+        menuBar.add(fileMenu);
+
+        final JMenuItem openMenuItem = new JMenuItem("Open...");
+        openMenuItem.addActionListener(e -> onOpenFile());
+        openMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK));
+        fileMenu.add(openMenuItem);
+
+        final JMenuItem fileStatisticsMenuItem = new JMenuItem("File Statistics...");
+        // TODO
+        fileMenu.add(fileStatisticsMenuItem);
+
+        final JMenuItem exitMenuItem = new JMenuItem("Exit");
+        // TODO
+        fileMenu.addSeparator();
+        fileMenu.add(exitMenuItem);
+
+        // Edit
+        final JMenu editMenu = new JMenu("Edit");
+        menuBar.add(editMenu);
+
+        final JMenuItem findMenuItem = new JMenuItem("Find");
+        // TODO
+        editMenu.add(findMenuItem);
+
+        final JMenuItem settingsMenuItem = new JMenuItem("Settings...");
+        // TODO
+        editMenu.add(settingsMenuItem);
+
+        // Navigate
+        final JMenu navigateMenu = new JMenu("Navigate");
+        menuBar.add(navigateMenu);
+
+        final JMenuItem goToMenuItem = new JMenuItem("Go To Position...");
+        goToMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_G, InputEvent.CTRL_DOWN_MASK));
+        goToMenuItem.addActionListener(actionEvent -> onGoToPosition());
+        navigateMenu.add(goToMenuItem);
+
+        // Help
+        final JMenu helpMenu = new JMenu("Help");
+        menuBar.add(helpMenu);
+
+        final JMenuItem aboutMenuItem = new JMenuItem("About...");
+        // TODO
+        helpMenu.add(aboutMenuItem);
+
+        return menuBar;
+    }
+
+    private void onOpenFile() {
+        final JFileChooser fileChooser = new JFileChooser(directoryFromSelection);
+        final int result = fileChooser.showOpenDialog(frame);
+        if (result == JFileChooser.APPROVE_OPTION) {
+            final File selectedFile = fileChooser.getSelectedFile();
+            openFile(selectedFile);
+        }
+    }
+
+    private void onGoToPosition() {
+        String result = (String)JOptionPane.showInputDialog(
+                frame,
+                "Enter Line[:Column]",
+                "GoTo",
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                null,
+                "1:1"
+        );
+        if (result != null) {
+            handleGoTo(result);
+        }
     }
 
     private void addResizeListener() {
@@ -249,7 +291,6 @@ public class GuiSwing {
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.ALT_DOWN_MASK), AMK_GO_ONE_PAGE_DOWN);
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, InputEvent.ALT_DOWN_MASK), AMK_GO_ONE_PAGE_LEFT);
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, InputEvent.ALT_DOWN_MASK), AMK_GO_ONE_PAGE_RIGHT);
-        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_O, InputEvent.CTRL_DOWN_MASK), AMK_OPEN_FILE);
     }
 
     private void prepareActionMapOfTextArea(final JTextArea textArea) {
@@ -347,12 +388,6 @@ public class GuiSwing {
             @Override
             public void actionPerformed(ActionEvent e) {
                 uiListener.ifPresent(listener -> listener.onGoOnePageRight(GuiSwing.this::updateLines));
-            }
-        });
-        textArea.getActionMap().put(AMK_OPEN_FILE, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                onOpenFile();
             }
         });
     }
