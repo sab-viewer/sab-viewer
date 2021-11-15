@@ -28,6 +28,7 @@ import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
+import java.awt.event.WindowEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
 import java.util.Collection;
@@ -150,9 +151,20 @@ public class GuiSwing {
 
     }
 
+    private void closeApplication() {
+        uiListener.ifPresent(ViewerUiListener::interruptBackgroundThreads);
+    }
+
     private void prepareGui() {
         frame = new JFrame("SAB-Viewer");
-        frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+        frame.setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
+        frame.addWindowListener(new java.awt.event.WindowAdapter(){
+            @Override
+            public void windowClosing(WindowEvent e) {
+                closeApplication();
+                super.windowClosing(e);
+            }
+        });
 
         textArea = new JTextArea();
         textArea.setEditable(false);
@@ -192,7 +204,10 @@ public class GuiSwing {
         fileMenu.add(fileStatisticsMenuItem);
 
         final JMenuItem exitMenuItem = new JMenuItem("Exit");
-        // TODO
+        exitMenuItem.addActionListener(actionEvent -> {
+            frame.dispose();
+            closeApplication(); // For some reason it is not called, when frame.dispose() is called... by the way, I am not sure, what is the correct order for those two calls.
+        });
         fileMenu.addSeparator();
         fileMenu.add(exitMenuItem);
 
