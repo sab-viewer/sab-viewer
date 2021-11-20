@@ -13,6 +13,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -21,14 +22,10 @@ public class ViewerController implements ViewerUiListener {
     private final Charset charset = StandardCharsets.UTF_8;
     private final String fileName;
 
-    private int currentlyDisplayedLines;
-    private int currentlyDisplayedColumns;
+    private final ViewerSettings currentViewerSettings_toBeAccessedSynchronized;
 
     private final int largeLinesJump = 500; // TODO: Should be modifiable by user in settings
     private final int largeColumnsJump = 500;
-
-    private int firstDisplayedLineIndex; // index in lineStatistics
-    private long firstDisplayedColumnIndex;
 
     private final AtomicBoolean initialLinesStillRelevant;
     private final List<LineContent> initialLines_toBeAccessedSynchronized;
@@ -44,21 +41,17 @@ public class ViewerController implements ViewerUiListener {
     private Consumer<ViewerContent> contentConsumerWaitingForReader;
     private final Thread readerThread;
 
-    public ViewerController(final String fileName, final int displayedLines, final int displayedColumns, final Consumer<ViewerContent> contentConsumer, final Consumer<ScannerState> stateConsumer, final Consumer<MessageInfo> messageConsumer) {
-        firstDisplayedLineIndex = 0;
-        firstDisplayedColumnIndex = 0;
-
-        currentlyDisplayedLines = displayedLines;
-        currentlyDisplayedColumns = displayedColumns;
+    public ViewerController(final String fileName, final int initiallyDisplayedLines, final int initiallyDisplayedColumns, final Consumer<ViewerContent> contentConsumer, final Consumer<ScannerState> stateConsumer, final Consumer<MessageInfo> messageConsumer) {
+        currentViewerSettings_toBeAccessedSynchronized = new ViewerSettings(initiallyDisplayedLines, initiallyDisplayedColumns, 0, 0);
 
         initialLinesStillRelevant = new AtomicBoolean(true);
-        initialLines_toBeAccessedSynchronized = new ArrayList<>(currentlyDisplayedLines);
+        initialLines_toBeAccessedSynchronized = new ArrayList<>(initiallyDisplayedLines);
         lineStatistics_toBeAccessedSynchronized = new ArrayList<>(100000);
 
         this.fileName = fileName;
         this.stateConsumer = stateConsumer;
         this.messageConsumer = messageConsumer;
-        scannerThread = new Thread(() -> scanFile(contentConsumer), "Scanner");
+        scannerThread = new Thread(() -> scanFile(contentConsumer, initiallyDisplayedLines, initiallyDisplayedColumns), "Scanner");
         scannerThread.start();
 
         readerSignal = new Semaphore(1);
@@ -76,11 +69,16 @@ public class ViewerController implements ViewerUiListener {
 
     @Override
     public void resize(final int displayedLines, final int displayedColumns, final Consumer<ViewerContent> contentConsumer) {
-        if (currentlyDisplayedLines != displayedLines || currentlyDisplayedColumns != displayedColumns) {
-            System.out.println("resize " + currentlyDisplayedLines + "x" + currentlyDisplayedColumns + " => " + displayedLines + "x" + displayedColumns);
-            currentlyDisplayedLines = displayedLines;
-            currentlyDisplayedColumns = displayedColumns;
-
+        boolean changed = false;
+        synchronized (this.currentViewerSettings_toBeAccessedSynchronized) {
+            if (currentViewerSettings_toBeAccessedSynchronized.getDisplayedLines() != displayedLines || currentViewerSettings_toBeAccessedSynchronized.getDisplayedColumns() != displayedColumns) {
+                System.out.println("resize " + currentViewerSettings_toBeAccessedSynchronized.getDisplayedLines() + "x" + currentViewerSettings_toBeAccessedSynchronized.getDisplayedColumns() + " => " + displayedLines + "x" + displayedColumns);
+                currentViewerSettings_toBeAccessedSynchronized.setDisplayedLines(displayedLines);
+                currentViewerSettings_toBeAccessedSynchronized.setDisplayedColumns(displayedColumns);
+                changed = true;
+            }
+        }
+        if (changed) {
             requestUpdate(contentConsumer);
         }
     }
@@ -91,9 +89,9 @@ public class ViewerController implements ViewerUiListener {
     }
 
     // this method is supposed to be executed in scannerThread
-    private void scanFile(final Consumer<ViewerContent> contentConsumer) {
+    private void scanFile(final Consumer<ViewerContent> contentConsumer, final int initiallyDisplayedLines, final int initiallyDisplayedColumns) {
         try {
-            Scanner.scanFile(fileName, charset, lineContent -> addInitialContent(lineContent, contentConsumer), currentlyDisplayedLines, currentlyDisplayedColumns, this::updateStatistics);
+            Scanner.scanFile(fileName, charset, lineContent -> addInitialContent(lineContent, contentConsumer), initiallyDisplayedLines, initiallyDisplayedColumns, this::updateStatistics);
 
             LineStatistics lastStatistics = lineStatistics_toBeAccessedSynchronized.get(lineStatistics_toBeAccessedSynchronized.size() - 1);
             stateConsumer.accept(new ScannerState(lineStatistics_toBeAccessedSynchronized.size(), lastStatistics.getCharacterPositionsInBytes()[0] + lastStatistics.getLengthInBytes(), true));
@@ -126,16 +124,21 @@ public class ViewerController implements ViewerUiListener {
     private void update(final Consumer<ViewerContent> contentConsumer) {
         initialLinesStillRelevant.set(false);
 
+        ViewerSettings viewerSettingsAtStartOfUpdate;
+        synchronized (currentViewerSettings_toBeAccessedSynchronized) {
+            viewerSettingsAtStartOfUpdate = new ViewerSettings(currentViewerSettings_toBeAccessedSynchronized);
+        }
+
         List<LineStatistics> linesToRead;
         synchronized (lineStatistics_toBeAccessedSynchronized) {
             if (lineStatistics_toBeAccessedSynchronized.isEmpty()) {
                 return;
             }
-            if (firstDisplayedLineIndex >= lineStatistics_toBeAccessedSynchronized.size()) {
-                firstDisplayedLineIndex = lineStatistics_toBeAccessedSynchronized.size() - 1;
+            if (viewerSettingsAtStartOfUpdate.getFirstDisplayedLineIndex() >= lineStatistics_toBeAccessedSynchronized.size()) {
+                viewerSettingsAtStartOfUpdate.setFirstDisplayedLineIndex(lineStatistics_toBeAccessedSynchronized.size() - 1);
             }
-            final int oneAfterLastLineIndex = Math.min(lineStatistics_toBeAccessedSynchronized.size(), firstDisplayedLineIndex + currentlyDisplayedLines);
-            linesToRead = new ArrayList<>(lineStatistics_toBeAccessedSynchronized.subList(firstDisplayedLineIndex, oneAfterLastLineIndex));
+            final int oneAfterLastLineIndex = Math.min(lineStatistics_toBeAccessedSynchronized.size(), viewerSettingsAtStartOfUpdate.getFirstDisplayedLineIndex() + viewerSettingsAtStartOfUpdate.getDisplayedLines());
+            linesToRead = new ArrayList<>(lineStatistics_toBeAccessedSynchronized.subList(viewerSettingsAtStartOfUpdate.getFirstDisplayedLineIndex(), oneAfterLastLineIndex));
         }
 
         final List<LineContent> lineContents;
@@ -143,11 +146,25 @@ public class ViewerController implements ViewerUiListener {
             if (reader == null) {
                 reader = new Reader(fileName, charset);
             }
-            lineContents = reader.readSpecificLines(linesToRead, firstDisplayedColumnIndex, currentlyDisplayedColumns);
+            lineContents = reader.readSpecificLines(linesToRead, viewerSettingsAtStartOfUpdate);
         } catch (IOException ioException) {
             throw displayAndCreateException(ioException, "read");
         }
-        contentConsumer.accept(new ViewerContent(lineContents, firstDisplayedLineIndex + 1, firstDisplayedColumnIndex + 1));
+
+        ViewerSettings viewerSettingsAtEndOfUpdate;
+        synchronized (currentViewerSettings_toBeAccessedSynchronized) {
+            viewerSettingsAtEndOfUpdate = new ViewerSettings(currentViewerSettings_toBeAccessedSynchronized);
+        }
+
+        if (Objects.equals(viewerSettingsAtStartOfUpdate, viewerSettingsAtEndOfUpdate)) {
+            contentConsumer.accept(
+                    new ViewerContent(
+                            lineContents,
+                            viewerSettingsAtStartOfUpdate.getFirstDisplayedLineIndex() + 1,
+                            viewerSettingsAtStartOfUpdate.getFirstDisplayedColumnIndex() + 1
+                    )
+            );
+        }
     }
 
     private void addInitialContent(final LineContent lineContent, final Consumer<ViewerContent> lineConsumer) {
@@ -168,22 +185,44 @@ public class ViewerController implements ViewerUiListener {
             lineStatistics_toBeAccessedSynchronized.add(statistics);
             numberOfLines = lineStatistics_toBeAccessedSynchronized.size();
         }
-        if ((numberOfLines < currentlyDisplayedLines && numberOfLines % 10 == 0) || numberOfLines % 5000 == 0) {
+        if ((numberOfLines < 250 && numberOfLines % 10 == 0) || numberOfLines % 5000 == 0) {
             stateConsumer.accept(new ScannerState(numberOfLines, statistics.getCharacterPositionsInBytes()[0] + statistics.getLengthInBytes(), false));
         }
     }
 
     private void moveVertical(final int lineOffset, final Consumer<ViewerContent> contentConsumer) {
-        moveToPosition(firstDisplayedLineIndex + lineOffset, firstDisplayedColumnIndex, contentConsumer);
+        synchronized (currentViewerSettings_toBeAccessedSynchronized) {
+            currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedLineIndex(Math.max(currentViewerSettings_toBeAccessedSynchronized.getFirstDisplayedLineIndex() + lineOffset, 0));
+        }
+        requestUpdate(contentConsumer);
     }
 
     private void moveHorizontal(final long columnOffset, final Consumer<ViewerContent> contentConsumer) {
-        moveToPosition(firstDisplayedLineIndex, firstDisplayedColumnIndex + columnOffset, contentConsumer);
+        synchronized (currentViewerSettings_toBeAccessedSynchronized) {
+            currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedColumnIndex(Math.max(currentViewerSettings_toBeAccessedSynchronized.getFirstDisplayedColumnIndex() + columnOffset, 0));
+        }
+        requestUpdate(contentConsumer);
+    }
+
+    private void moveToVerticalPosition(final int firstDisplayedLineIndex, final Consumer<ViewerContent> contentConsumer) {
+        synchronized (currentViewerSettings_toBeAccessedSynchronized) {
+            currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedLineIndex(Math.max(firstDisplayedLineIndex, 0));
+        }
+        requestUpdate(contentConsumer);
+    }
+
+    private void moveToHorizontalPosition(final long firstDisplayedColumnIndex, final Consumer<ViewerContent> contentConsumer) {
+        synchronized (currentViewerSettings_toBeAccessedSynchronized) {
+            currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedColumnIndex(Math.max(firstDisplayedColumnIndex, 0));
+        }
+        requestUpdate(contentConsumer);
     }
 
     private void moveToPosition(final int firstDisplayedLineIndex, final long firstDisplayedColumnIndex, final Consumer<ViewerContent> contentConsumer) {
-        this.firstDisplayedLineIndex = Math.max(firstDisplayedLineIndex, 0);
-        this.firstDisplayedColumnIndex = Math.max(firstDisplayedColumnIndex, 0);
+        synchronized (currentViewerSettings_toBeAccessedSynchronized) {
+            currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedLineIndex(Math.max(firstDisplayedLineIndex, 0));
+            currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedColumnIndex(Math.max(firstDisplayedColumnIndex, 0));
+        }
         requestUpdate(contentConsumer);
     }
 
@@ -215,54 +254,80 @@ public class ViewerController implements ViewerUiListener {
 
     @Override
     public void onGoOnePageUp(final Consumer<ViewerContent> contentConsumer) {
-        moveVertical((currentlyDisplayedLines - 1) * -1, contentConsumer);
+        ViewerSettings viewerSettings;
+        synchronized (currentViewerSettings_toBeAccessedSynchronized) {
+            viewerSettings = new ViewerSettings(currentViewerSettings_toBeAccessedSynchronized);
+        }
+        moveVertical((viewerSettings.getDisplayedLines() - 1) * -1, contentConsumer);
     }
 
     @Override
     public void onGoOnePageDown(final Consumer<ViewerContent> contentConsumer) {
-        moveVertical(currentlyDisplayedLines - 1, contentConsumer);
+        ViewerSettings viewerSettings;
+        synchronized (currentViewerSettings_toBeAccessedSynchronized) {
+            viewerSettings = new ViewerSettings(currentViewerSettings_toBeAccessedSynchronized);
+        }
+        moveVertical(viewerSettings.getDisplayedLines() - 1, contentConsumer);
     }
 
     @Override
     public void onGoOnePageLeft(final Consumer<ViewerContent> contentConsumer) {
-        moveHorizontal((-1)*(currentlyDisplayedColumns - 1), contentConsumer);
+        ViewerSettings viewerSettings;
+        synchronized (currentViewerSettings_toBeAccessedSynchronized) {
+            viewerSettings = new ViewerSettings(currentViewerSettings_toBeAccessedSynchronized);
+        }
+        moveHorizontal((-1)*(viewerSettings.getDisplayedColumns() - 1), contentConsumer);
     }
 
     @Override
     public void onGoOnePageRight(final Consumer<ViewerContent> contentConsumer) {
-        moveHorizontal(currentlyDisplayedColumns - 1, contentConsumer); // TODO: Do we need to stop it, when we reach end of line? which line?
+        ViewerSettings viewerSettings;
+        synchronized (currentViewerSettings_toBeAccessedSynchronized) {
+            viewerSettings = new ViewerSettings(currentViewerSettings_toBeAccessedSynchronized);
+        }
+        moveHorizontal(viewerSettings.getDisplayedColumns() - 1, contentConsumer);
     }
 
     @Override
     public void onGoToLineBegin(final Consumer<ViewerContent> contentConsumer) {
-        moveToPosition(firstDisplayedLineIndex, 0, contentConsumer);
+        moveToHorizontalPosition(0, contentConsumer);
     }
 
     @Override
     public void onGoToLineEnd(final Consumer<ViewerContent> contentConsumer) {
+        ViewerSettings viewerSettings;
+        synchronized (currentViewerSettings_toBeAccessedSynchronized) {
+            viewerSettings = new ViewerSettings(currentViewerSettings_toBeAccessedSynchronized);
+        }
         LineStatistics statisticOfCurrentLine = null;
         synchronized (lineStatistics_toBeAccessedSynchronized) {
-            if (lineStatistics_toBeAccessedSynchronized.size() > firstDisplayedLineIndex) {
-                statisticOfCurrentLine = ViewerController.this.lineStatistics_toBeAccessedSynchronized.get(firstDisplayedLineIndex);
+            if (lineStatistics_toBeAccessedSynchronized.size() > viewerSettings.getFirstDisplayedLineIndex()) {
+                statisticOfCurrentLine = ViewerController.this.lineStatistics_toBeAccessedSynchronized.get(viewerSettings.getFirstDisplayedLineIndex());
             }
         }
         if (statisticOfCurrentLine != null) {
-            moveToPosition(firstDisplayedLineIndex, statisticOfCurrentLine.getLengthInCharacters() - currentlyDisplayedColumns, contentConsumer);
+            moveToHorizontalPosition(statisticOfCurrentLine.getLengthInCharacters() - viewerSettings.getDisplayedColumns(), contentConsumer);
         }
     }
 
     @Override
     public void onGoToFirstLine(final Consumer<ViewerContent> contentConsumer) {
-        moveToPosition(0, firstDisplayedColumnIndex, contentConsumer);
+        moveToVerticalPosition(0, contentConsumer);
     }
 
     @Override
     public void onGoToLastLine(final Consumer<ViewerContent> contentConsumer) {
+        ViewerSettings viewerSettings;
+        synchronized (currentViewerSettings_toBeAccessedSynchronized) {
+            viewerSettings = new ViewerSettings(currentViewerSettings_toBeAccessedSynchronized);
+        }
+
         int line;
         synchronized (lineStatistics_toBeAccessedSynchronized) {
-            line = Math.max(0, lineStatistics_toBeAccessedSynchronized.size() - currentlyDisplayedLines);
+            line = Math.max(0, lineStatistics_toBeAccessedSynchronized.size() - viewerSettings.getDisplayedLines());
         }
-        moveToPosition(line, firstDisplayedColumnIndex, contentConsumer);
+
+        moveToVerticalPosition(line, contentConsumer);
     }
 
     @Override

@@ -1,5 +1,7 @@
 package com.sab_engineering.tools.sab_viewer.io;
 
+import com.sab_engineering.tools.sab_viewer.controller.ViewerSettings;
+
 import java.io.Closeable;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -20,8 +22,10 @@ public class Reader implements Closeable {
         seekableByteChannel = Files.newByteChannel(Paths.get(fileName), StandardOpenOption.READ);
     }
 
-    public List<LineContent> readSpecificLines(List<LineStatistics> linesToReadOrderedByStartPositionInFile, long offsetFromBeginningOfLineInCharacters, int numberOfVisibleCharactersPerLine) throws IOException {
+    public List<LineContent> readSpecificLines(List<LineStatistics> linesToReadOrderedByStartPositionInFile, ViewerSettings viewerSettings) throws IOException {
         long startTimestamp = System.currentTimeMillis();
+        long offsetFromBeginningOfLineInCharacters = viewerSettings.getFirstDisplayedColumnIndex();
+        int numberOfVisibleCharactersPerLine = viewerSettings.getDisplayedColumns();
 
         if (offsetFromBeginningOfLineInCharacters < 0) {
             throw new IllegalStateException("Negative offsets are not supported: " + offsetFromBeginningOfLineInCharacters);
