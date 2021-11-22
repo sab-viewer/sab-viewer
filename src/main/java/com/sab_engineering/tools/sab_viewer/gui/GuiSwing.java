@@ -7,22 +7,8 @@ import com.sab_engineering.tools.sab_viewer.controller.ViewerController;
 import com.sab_engineering.tools.sab_viewer.controller.ViewerUiListener;
 import com.sab_engineering.tools.sab_viewer.io.LineContent;
 
-import javax.swing.Action;
-import javax.swing.JFileChooser;
-import javax.swing.JFrame;
-import javax.swing.JLabel;
-import javax.swing.JMenu;
-import javax.swing.JMenuBar;
-import javax.swing.JMenuItem;
-import javax.swing.JOptionPane;
-import javax.swing.JPanel;
-import javax.swing.JTextArea;
-import javax.swing.KeyStroke;
-import javax.swing.SwingUtilities;
-import java.awt.BorderLayout;
-import java.awt.Dimension;
-import java.awt.Font;
-import java.awt.FontMetrics;
+import javax.swing.*;
+import java.awt.*;
 import java.awt.event.ActionEvent;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
@@ -65,6 +51,7 @@ public class GuiSwing {
     private int numberOfLinesToDisplay;
     private int numberOfColumnsToDisplay;
     private JLabel currentPosition;
+    private JLabel memoryStatus;
     private JLabel scannerStatus;
 
     public GuiSwing(final Optional<String> maybeFilePath) {
@@ -135,6 +122,12 @@ public class GuiSwing {
     private void updateState(ScannerState scannerState) {
         SwingUtilities.invokeLater(
                 () -> {
+                    String memoryUsage = String.format("RAM used: %4d / %4d MB (VM limit: %4d MB)", scannerState.getUsedMemory() / (1024 * 1024), scannerState.getTotalMemory() / (1024 * 1024), scannerState.getMaxMemory() / (1024 * 1024));
+                    if (scannerState.isOutOfMemory()) {
+                        memoryUsage += " Scanner ran out of memory!";
+                    }
+                    this.memoryStatus.setText(memoryUsage);
+
                     String runningIndicator;
                     String readSpeed;
                     if (scannerState.isFinished()) {
@@ -142,8 +135,12 @@ public class GuiSwing {
                         readSpeed = "";
                     } else {
                         runningIndicator = "+";
-                        double timePassedInSeconds = (System.currentTimeMillis() - uiListenerStartTimeStamp) / 1000.0;
-                        readSpeed = String.format(" (%5.2f MB/s)", scannerState.getBytesScanned() / (1024 * 1024 * timePassedInSeconds));
+                        if (! scannerState.isOutOfMemory()) {
+                            double timePassedInSeconds = (System.currentTimeMillis() - uiListenerStartTimeStamp) / 1000.0;
+                            readSpeed = String.format(" (%5.2f MB/s)", scannerState.getBytesScanned() / (1024 * 1024 * timePassedInSeconds));
+                        } else {
+                            readSpeed = "";
+                        }
                     }
                     this.scannerStatus.setText(" KB: " + scannerState.getBytesScanned() / 1024 + runningIndicator + readSpeed + "  Lines: " + scannerState.getLinesScanned() + runningIndicator + " ");
                 }
@@ -178,8 +175,13 @@ public class GuiSwing {
 
         JPanel statusBar = new JPanel(new BorderLayout());
         currentPosition = new JLabel(" 1:1");
+        currentPosition.setHorizontalAlignment(SwingConstants.LEFT);
         statusBar.add(currentPosition, BorderLayout.WEST);
+        memoryStatus = new JLabel();
+        memoryStatus.setHorizontalAlignment(SwingConstants.CENTER);
+        statusBar.add(memoryStatus, BorderLayout.CENTER);
         scannerStatus = new JLabel();
+        scannerStatus.setHorizontalAlignment(SwingConstants.RIGHT);
         statusBar.add(scannerStatus, BorderLayout.EAST);
 
         frame.getContentPane().add(BorderLayout.NORTH, menuBar);
@@ -273,7 +275,7 @@ public class GuiSwing {
             public void componentResized(ComponentEvent e) {
                 Dimension newSize = e.getComponent().getSize();
                 computeSizeOfVisibleArea(newSize);
-                uiListener.ifPresent(viewerUiListener -> viewerUiListener.resize(numberOfLinesToDisplay, numberOfColumnsToDisplay, GuiSwing.this::updateLines));
+                uiListener.ifPresent(viewerUiListener -> viewerUiListener.resize(numberOfLinesToDisplay, numberOfColumnsToDisplay));
             }
             @Override
             public void componentMoved(ComponentEvent e) {
@@ -312,97 +314,97 @@ public class GuiSwing {
         textArea.getActionMap().put(AMK_GO_ONE_LINE_UP, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(listener -> listener.onGoOneLineUp(GuiSwing.this::updateLines));
+                uiListener.ifPresent(ViewerUiListener::onGoOneLineUp);
             }
         });
         textArea.getActionMap().put(AMK_GO_ONE_PAGE_UP, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(listener -> listener.onGoOnePageUp(GuiSwing.this::updateLines));
+                uiListener.ifPresent(ViewerUiListener::onGoOnePageUp);
             }
         });
         textArea.getActionMap().put(AMK_GO_ONE_LINE_DOWN, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(listener -> listener.onGoOneLineDown(GuiSwing.this::updateLines));
+                uiListener.ifPresent(ViewerUiListener::onGoOneLineDown);
             }
         });
         textArea.getActionMap().put(AMK_GO_ONE_PAGE_DOWN, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(listener -> listener.onGoOnePageDown(GuiSwing.this::updateLines));
+                uiListener.ifPresent(ViewerUiListener::onGoOnePageDown);
             }
         });
         textArea.getActionMap().put(AMK_GO_ONE_COLUMN_LEFT, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(listener -> listener.onGoOneColumnLeft(GuiSwing.this::updateLines));
+                uiListener.ifPresent(ViewerUiListener::onGoOneColumnLeft);
             }
         });
         textArea.getActionMap().put(AMK_GO_ONE_COLUMN_RIGHT, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(listener -> listener.onGoOneColumnRight(GuiSwing.this::updateLines));
+                uiListener.ifPresent(ViewerUiListener::onGoOneColumnRight);
             }
         });
         textArea.getActionMap().put(AMK_GO_TO_LINE_BEGIN, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(listener -> listener.onGoToLineBegin(GuiSwing.this::updateLines));
+                uiListener.ifPresent(ViewerUiListener::onGoToLineBegin);
             }
         });
         textArea.getActionMap().put(AMK_GO_TO_LINE_END, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(listener -> listener.onGoToLineEnd(GuiSwing.this::updateLines));
+                uiListener.ifPresent(ViewerUiListener::onGoToLineEnd);
             }
         });
         textArea.getActionMap().put(AMK_GO_TO_FIST_LINE, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(listener -> listener.onGoToFirstLine(GuiSwing.this::updateLines));
+                uiListener.ifPresent(ViewerUiListener::onGoToFirstLine);
             }
         });
         textArea.getActionMap().put(AMK_GO_TO_LAST_LINE, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(listener -> listener.onGoToLastLine(GuiSwing.this::updateLines));
+                uiListener.ifPresent(ViewerUiListener::onGoToLastLine);
             }
         });
         textArea.getActionMap().put(AMK_LARGE_JUMP_UP, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(listener -> listener.onLargeJumpUp(GuiSwing.this::updateLines));
+                uiListener.ifPresent(ViewerUiListener::onLargeJumpUp);
             }
         });
         textArea.getActionMap().put(AMK_LARGE_JUMP_DOWN, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(listener -> listener.onLargeJumpDown(GuiSwing.this::updateLines));
+                uiListener.ifPresent(ViewerUiListener::onLargeJumpDown);
             }
         });
         textArea.getActionMap().put(AMK_LARGE_JUMP_LEFT, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(listener -> listener.onLargeJumpLeft(GuiSwing.this::updateLines));
+                uiListener.ifPresent(ViewerUiListener::onLargeJumpLeft);
             }
         });
         textArea.getActionMap().put(AMK_LARGE_JUMP_RIGHT, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(listener -> listener.onLargeJumpRight(GuiSwing.this::updateLines));
+                uiListener.ifPresent(ViewerUiListener::onLargeJumpRight);
             }
         });
         textArea.getActionMap().put(AMK_GO_ONE_PAGE_LEFT, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(listener -> listener.onGoOnePageLeft(GuiSwing.this::updateLines));
+                uiListener.ifPresent(ViewerUiListener::onGoOnePageLeft);
             }
         });
         textArea.getActionMap().put(AMK_GO_ONE_PAGE_RIGHT, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(listener -> listener.onGoOnePageRight(GuiSwing.this::updateLines));
+                uiListener.ifPresent(ViewerUiListener::onGoOnePageRight);
             }
         });
     }
@@ -417,14 +419,14 @@ public class GuiSwing {
                 if (address[0].matches("^\\d+$") && address[1].matches("^\\d+$")) {
                     int line = Integer.parseInt(address[0]) - 1;
                     int column = Integer.parseInt(address[1]) - 1;
-                    uiListener.get().onGoTo(line, column, GuiSwing.this::updateLines);
+                    uiListener.get().onGoTo(line, column);
 
                     return;
                 }
             }
         } else if (result.matches("^\\d+$")) {
             int line = Integer.parseInt(result) - 1;
-            uiListener.get().onGoTo(line, 0, GuiSwing.this::updateLines);
+            uiListener.get().onGoTo(line, 0);
 
             return;
         }
