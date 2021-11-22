@@ -29,7 +29,7 @@ public class TextModeViewer {
         Thread scannerThread = new Thread(
                 () -> {
                     try {
-                        Scanner.scanFile(fileName, charset, LINE_CONTENTS::add, ROWS, COLUMNS, LINE_STATISTICS::add);
+                        new Scanner(fileName, charset, LINE_CONTENTS::add, ROWS, COLUMNS, LINE_STATISTICS::add).scanFile();
                     } catch (IOException ioException) {
                         scannerException = ioException;
                     }

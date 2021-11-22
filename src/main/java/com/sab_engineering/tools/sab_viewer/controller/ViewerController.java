@@ -98,7 +98,8 @@ public class ViewerController implements ViewerUiListener {
     // this method is supposed to be executed in scannerThread
     private void scanFile(final int initiallyDisplayedLines, final int initiallyDisplayedColumns) {
         try {
-            Scanner.scanFile(fileName, charset, lineContent -> addInitialContent(lineContent, contentConsumer), initiallyDisplayedLines, initiallyDisplayedColumns, this::updateStatistics);
+            Scanner scanner = new Scanner(fileName, charset, lineContent -> addInitialContent(lineContent, contentConsumer), initiallyDisplayedLines, initiallyDisplayedColumns, this::updateStatistics);
+            scanner.scanFile();
 
             LineStatistics lastStatistics = lineStatistics_toBeAccessedSynchronized.get(lineStatistics_toBeAccessedSynchronized.size() - 1);
             Runtime runtime = Runtime.getRuntime();
