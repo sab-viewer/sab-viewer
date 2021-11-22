@@ -18,21 +18,26 @@ public class Scanner {
     private final String fileName;
     private final CharsetDecoder charsetDecoder;
 
-    private final Consumer<LineContent> linePreviewListener;
+    private final Consumer<LinePreview> linePreviewListener;
     private final int numberOfPreviewLines;
     private final int numberOfVisibleCharactersPerLine;
-    private final Consumer<LineStatistics> statisticsListener;
+    private final Consumer<LinePositionBatch> statisticsListener;
 
     private final ByteBuffer readBuffer;
     private final CharBuffer opportunisticDecodeBuffer;
     private final CharBuffer fallbackDecodeBuffer;
 
-    int numberOfLinesRead;
-    int numberOfLinePreviewsPublished;
+    private int numberOfLinesRead;
 
-    char[] linePreviewBuffer;
+    private long[][] statisticsBatch_characterPositionsInBytes;
+    private long[] statisticsBatch_lengthInBytes;
+    private long[] statisticsBatch_lengthInCharacters;
+    private int statisticsBatch_numberOfContainedLines;
 
-    public Scanner(String fileName, Charset charset, Consumer<LineContent> linePreviewListener, int numberOfPreviewLines, int numberCharactersForLinePreview, Consumer<LineStatistics> statisticsListener) {
+    private final char[] linePreviewBuffer;
+    private int numberOfLinePreviewsPublished;
+
+    public Scanner(String fileName, Charset charset, Consumer<LinePreview> linePreviewListener, int numberOfPreviewLines, int numberCharactersForLinePreview, Consumer<LinePositionBatch> statisticsListener) {
         this.fileName = fileName;
         this.charsetDecoder = charset.newDecoder();
         this.charsetDecoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
@@ -47,9 +52,11 @@ public class Scanner {
         this.fallbackDecodeBuffer = CharBuffer.allocate(1);
 
         this.numberOfLinesRead = 0;
-        this.numberOfLinePreviewsPublished = 0;
+
+        initStatisticsBatch();
 
         this.linePreviewBuffer = new char[numberCharactersForLinePreview];
+        this.numberOfLinePreviewsPublished = 0;
     }
 
     public void scanFile() throws IOException {
@@ -123,8 +130,7 @@ public class Scanner {
                                         if (numberOfLinesRead < numberOfPreviewLines && charactersInCurrentLine <= numberOfVisibleCharactersPerLine) {
                                             publishLinePreview((int) charactersInCurrentLine);
                                         }
-                                        long[] characterPositionsInBytes = characterPositionEveryNCharactersInBytes.stream().mapToLong(Long::longValue).toArray();
-                                        publishLineStatistic(characterPositionsInBytes, lineEndPositionInBytes, charactersInCurrentLine);
+                                        finishLine(characterPositionEveryNCharactersInBytes, lineEndPositionInBytes, charactersInCurrentLine);
                                     }
                                     characterPositionEveryNCharactersInBytes.clear();
                                     charactersInCurrentLine = -1;
@@ -153,23 +159,47 @@ public class Scanner {
                 if (numberOfLinesRead < numberOfPreviewLines && charactersInCurrentLine <= numberOfVisibleCharactersPerLine) {
                     publishLinePreview((int) charactersInCurrentLine);
                 }
-                long[] characterPositionsInBytes = characterPositionEveryNCharactersInBytes.stream().mapToLong(Long::longValue).toArray();
-                publishLineStatistic(characterPositionsInBytes, positionInBytes, charactersInCurrentLine);
+                finishLine(characterPositionEveryNCharactersInBytes, positionInBytes, charactersInCurrentLine);
             }
+
+            publishStatistics();
         }
     }
 
-    private void publishLineStatistic(long[] characterPositionsInBytes, long endPositionInBytes, long lengthInCharacters) {
-        statisticsListener.accept(new LineStatistics(characterPositionsInBytes, endPositionInBytes - characterPositionsInBytes[0], lengthInCharacters));
+    private void finishLine(final ArrayList<Long> characterPositionEveryNCharactersInBytes, long endPositionInBytes, long lengthInCharacters) {
+        final long[] characterPositionsInBytes = characterPositionEveryNCharactersInBytes.stream().mapToLong(Long::longValue).toArray();
+
+        this.statisticsBatch_characterPositionsInBytes[this.statisticsBatch_numberOfContainedLines] = characterPositionsInBytes;
+        this.statisticsBatch_lengthInBytes[this.statisticsBatch_numberOfContainedLines] = endPositionInBytes - characterPositionsInBytes[0];
+        this.statisticsBatch_lengthInCharacters[this.statisticsBatch_numberOfContainedLines] = lengthInCharacters;
+        this.statisticsBatch_numberOfContainedLines++;
+
+        if (this.statisticsBatch_numberOfContainedLines == IoConstants.NUMBER_OF_LINES_PER_BATCH) {
+            publishStatistics();
+            initStatisticsBatch();
+        }
         numberOfLinesRead++;
     }
 
+    private void publishStatistics() {
+        if (this.statisticsBatch_numberOfContainedLines > 0) {
+            statisticsListener.accept(new LinePositionBatch(this.statisticsBatch_characterPositionsInBytes, this.statisticsBatch_lengthInBytes, this.statisticsBatch_lengthInCharacters, this.statisticsBatch_numberOfContainedLines));
+        }
+    }
+
     private void publishLinePreview(int charactersInLinePreview) {
-        linePreviewListener.accept(new LineContent(new String(linePreviewBuffer, 0, charactersInLinePreview)));
+        linePreviewListener.accept(new LinePreview(new String(linePreviewBuffer, 0, charactersInLinePreview)));
         numberOfLinePreviewsPublished++;
     }
 
     private boolean bufferHasEnoughBytesToNotUnderflowDuringDecode(ByteBuffer readBuffer) {
         return (readBuffer.limit() - readBuffer.position()) > (IoConstants.NUMBER_OF_BYTES_TO_DECODE_OPPORTUNISTICALLY * 3);
+    }
+
+    private void initStatisticsBatch() {
+        this.statisticsBatch_characterPositionsInBytes = new long[IoConstants.NUMBER_OF_LINES_PER_BATCH][];
+        this.statisticsBatch_lengthInBytes = new long[IoConstants.NUMBER_OF_LINES_PER_BATCH];
+        this.statisticsBatch_lengthInCharacters = new long[IoConstants.NUMBER_OF_LINES_PER_BATCH];
+        this.statisticsBatch_numberOfContainedLines = 0;
     }
 }

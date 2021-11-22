@@ -7,16 +7,14 @@ public class ScannerState {
     private final long usedMemory;
     private final long totalMemory;
     private final long maxMemory;
-    private final boolean outOfMemory;
 
-    public ScannerState(int linesScanned, long bytesScanned, boolean finished, long usedMemory, long totalMemory, long maxMemory, boolean outOfMemory) {
+    public ScannerState(int linesScanned, long bytesScanned, boolean finished, long usedMemory, long totalMemory, long maxMemory) {
         this.linesScanned = linesScanned;
         this.bytesScanned = bytesScanned;
         this.finished = finished;
         this.usedMemory = usedMemory;
         this.totalMemory = totalMemory;
         this.maxMemory = maxMemory;
-        this.outOfMemory = outOfMemory;
     }
 
     public int getLinesScanned() {
@@ -41,9 +39,5 @@ public class ScannerState {
 
     public long getMaxMemory() {
         return maxMemory;
-    }
-
-    public boolean isOutOfMemory() {
-        return outOfMemory;
     }
 }

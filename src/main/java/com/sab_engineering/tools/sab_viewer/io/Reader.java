@@ -22,7 +22,7 @@ public class Reader implements Closeable {
         seekableByteChannel = Files.newByteChannel(Paths.get(fileName), StandardOpenOption.READ);
     }
 
-    public List<LineContent> readSpecificLines(List<LineStatistics> linesToReadOrderedByStartPositionInFile, ViewerSettings viewerSettings) throws IOException {
+    public List<LinePreview> readSpecificLines(List<LinePositionBatch> orderedLinePositionBatches, int startIndexInBatch, int endIndexInBatch, ViewerSettings viewerSettings) throws IOException {
         long startTimestamp = System.currentTimeMillis();
         long offsetFromBeginningOfLineInCharacters = viewerSettings.getFirstDisplayedColumnIndex();
         int numberOfVisibleCharactersPerLine = viewerSettings.getDisplayedColumns();
@@ -31,21 +31,26 @@ public class Reader implements Closeable {
             throw new IllegalStateException("Negative offsets are not supported: " + offsetFromBeginningOfLineInCharacters);
         }
 
-        List<LineContent> resultingLines = new ArrayList<>(linesToReadOrderedByStartPositionInFile.size());
-        for (LineStatistics lineStatistics : linesToReadOrderedByStartPositionInFile) {
-            if (offsetFromBeginningOfLineInCharacters >= lineStatistics.getLengthInCharacters()) {
-                resultingLines.add(new LineContent(""));
+        List<LinePreview> resultingLines = new ArrayList<>(endIndexInBatch - startIndexInBatch);
+        for (int lineIndexInBatches = startIndexInBatch; lineIndexInBatches < endIndexInBatch; lineIndexInBatches++) {
+            int batchIndex = lineIndexInBatches / IoConstants.NUMBER_OF_LINES_PER_BATCH;
+            LinePositionBatch linePositionBatch = orderedLinePositionBatches.get(batchIndex);
+
+            int lineIndexInBatch = lineIndexInBatches % IoConstants.NUMBER_OF_LINES_PER_BATCH;
+
+            if (offsetFromBeginningOfLineInCharacters >= linePositionBatch.getLengthInCharacters(lineIndexInBatch)) {
+                resultingLines.add(new LinePreview(""));
             } else {
-                int charactersToRead = (int) Math.min(numberOfVisibleCharactersPerLine, lineStatistics.getLengthInCharacters() - offsetFromBeginningOfLineInCharacters);
+                int charactersToRead = (int) Math.min(numberOfVisibleCharactersPerLine, linePositionBatch.getLengthInCharacters(lineIndexInBatch) - offsetFromBeginningOfLineInCharacters);
                 int characterMultipleToStartReading = (int) (offsetFromBeginningOfLineInCharacters / IoConstants.NUMBER_OF_CHARACTERS_PER_BYTE_POSITION);
                 int characterMultipleToStopReading = 1 + (int) ((offsetFromBeginningOfLineInCharacters + charactersToRead) / IoConstants.NUMBER_OF_CHARACTERS_PER_BYTE_POSITION);
 
-                long positionToStartReadingInBytes = lineStatistics.getCharacterPositionsInBytes()[characterMultipleToStartReading];
+                long positionToStartReadingInBytes = linePositionBatch.getCharacterPositionsInBytes(lineIndexInBatch)[characterMultipleToStartReading];
                 long positionToStopReadingInBytes;
-                if (characterMultipleToStopReading < lineStatistics.getCharacterPositionsInBytes().length) {
-                    positionToStopReadingInBytes = lineStatistics.getCharacterPositionsInBytes()[characterMultipleToStopReading];
+                if (characterMultipleToStopReading < linePositionBatch.getCharacterPositionsInBytes(lineIndexInBatch).length) {
+                    positionToStopReadingInBytes = linePositionBatch.getCharacterPositionsInBytes(lineIndexInBatch)[characterMultipleToStopReading];
                 } else {
-                    positionToStopReadingInBytes = lineStatistics.getCharacterPositionsInBytes()[0] + lineStatistics.getLengthInBytes();
+                    positionToStopReadingInBytes = linePositionBatch.getCharacterPositionsInBytes(lineIndexInBatch)[0] + linePositionBatch.getLengthInBytes(lineIndexInBatch);
                 }
                 int bytesToRead = (int) (positionToStopReadingInBytes - positionToStartReadingInBytes);
 
@@ -57,7 +62,7 @@ public class Reader implements Closeable {
                 }
                 int numberOfCharactersToDiscardAtStartOfString = (int) (offsetFromBeginningOfLineInCharacters % IoConstants.NUMBER_OF_CHARACTERS_PER_BYTE_POSITION);
                 String charactersRead = new String(lineBuffer.array(), charset).substring(numberOfCharactersToDiscardAtStartOfString, numberOfCharactersToDiscardAtStartOfString + charactersToRead);
-                resultingLines.add(new LineContent(charactersRead));
+                resultingLines.add(new LinePreview(charactersRead));
             }
         }
 

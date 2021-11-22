@@ -1,9 +1,9 @@
 package com.sab_engineering.tools.sab_viewer.io;
 
-public class LineContent {
+public class LinePreview {
     private final String visibleContent;
 
-    public LineContent(String visibleContent) {
+    public LinePreview(String visibleContent) {
         this.visibleContent = visibleContent;
     }
 

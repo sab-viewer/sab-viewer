@@ -1,21 +1,21 @@
 package com.sab_engineering.tools.sab_viewer.controller;
 
-import com.sab_engineering.tools.sab_viewer.io.LineContent;
+import com.sab_engineering.tools.sab_viewer.io.LinePreview;
 
-import java.util.Collection;
+import java.util.List;
 
 public class ViewerContent {
-    private final Collection<LineContent> lines;
+    private final List<LinePreview> lines;
     private final int firstDisplayedLine;
     private final long firstDisplayedColumn;
 
-    public ViewerContent(Collection<LineContent> lines, int firstDisplayedLine, long firstDisplayedColumn) {
+    public ViewerContent(List<LinePreview> lines, int firstDisplayedLine, long firstDisplayedColumn) {
         this.lines = lines;
         this.firstDisplayedLine = firstDisplayedLine;
         this.firstDisplayedColumn = firstDisplayedColumn;
     }
 
-    public Collection<LineContent> getLines() {
+    public List<LinePreview> getLines() {
         return lines;
     }
 

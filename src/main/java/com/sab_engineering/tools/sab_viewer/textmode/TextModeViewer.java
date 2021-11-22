@@ -1,82 +1,46 @@
 package com.sab_engineering.tools.sab_viewer.textmode;
 
-import com.sab_engineering.tools.sab_viewer.controller.ViewerSettings;
-import com.sab_engineering.tools.sab_viewer.io.LineContent;
-import com.sab_engineering.tools.sab_viewer.io.LineStatistics;
-import com.sab_engineering.tools.sab_viewer.io.Reader;
-import com.sab_engineering.tools.sab_viewer.io.Scanner;
+import com.sab_engineering.tools.sab_viewer.controller.ScannerState;
+import com.sab_engineering.tools.sab_viewer.controller.ViewerContent;
+import com.sab_engineering.tools.sab_viewer.controller.ViewerController;
+import com.sab_engineering.tools.sab_viewer.io.LinePreview;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
-import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
-import java.util.Vector;
 
-// this just some simple demo for the scanner to show and test the components a real GUI would need
+// this just some simple demo for the Controller
 public class TextModeViewer {
     private final static int ROWS = 40;
     private final static int COLUMNS = 80;
 
-    private static final List<LineContent> LINE_CONTENTS = new Vector<>(ROWS); // synchronized vector is useful after all
-    private static final List<LineStatistics> LINE_STATISTICS = new Vector<>(100000);
+    private static ViewerController viewerController;
+    private static int displayedLines = 0;
 
-    private static IOException scannerException = null;
-
-    @SuppressWarnings("BusyWait")
     public static void view(String fileName) {
-        Charset charset = StandardCharsets.UTF_8;
-        Thread scannerThread = new Thread(
-                () -> {
-                    try {
-                        new Scanner(fileName, charset, LINE_CONTENTS::add, ROWS, COLUMNS, LINE_STATISTICS::add).scanFile();
-                    } catch (IOException ioException) {
-                        scannerException = ioException;
-                    }
-                },
-                "Scanner"
+        viewerController = new ViewerController(
+                fileName,
+                StandardCharsets.UTF_8,
+                ROWS,
+                COLUMNS,
+                TextModeViewer::displayViewerContent,
+                TextModeViewer::handleScannerState,
+                messageInfo -> System.err.println(messageInfo.getMessage())
         );
-        scannerThread.start();
+    }
 
-        int printedSize = 0;
-        while (scannerThread.isAlive() || printedSize < LINE_CONTENTS.size()) {
-            while (printedSize < LINE_CONTENTS.size()) {
-                LineContent newLine = LINE_CONTENTS.get(printedSize);
-                printedSize += 1;
-
-                System.out.println(newLine.getVisibleContent());
-            }
-            try {
-                Thread.sleep(10);
-            } catch (InterruptedException e) {
-                scannerThread.interrupt();
-            }
+    private static void displayViewerContent(ViewerContent viewerContent) {
+        List<LinePreview> lines = viewerContent.getLines();
+        for (int i = displayedLines; i < lines.size(); i++) {
+            System.out.println(lines.get(i).getVisibleContent());
+            displayedLines++;
         }
+    }
 
-        if (scannerException != null) {
-            throw new UncheckedIOException("Unable to scan file '" + fileName + "': " + scannerException.getClass().getSimpleName(), scannerException);
+    private static void handleScannerState(ScannerState scannerState) {
+        if (scannerState.isFinished()) {
+            System.out.println("Finished Scanning " + scannerState.getLinesScanned() + " lines (" + scannerState.getBytesScanned() + " bytes) while consuming " + scannerState.getUsedMemory() / (1024 * 1024) + " MB of RAM");
+            viewerController.interruptBackgroundThreads();
         }
-
-        try {
-            if (LINE_STATISTICS.size() > ROWS) {
-                Reader reader = new Reader(fileName, charset);
-                List<LineContent> lineContents = reader.readSpecificLines(LINE_STATISTICS.subList(LINE_STATISTICS.size() / 2 - 5, LINE_STATISTICS.size() / 2 + 5), new ViewerSettings(ROWS, COLUMNS, LINE_STATISTICS.size() / 2 - 5, 10));
-                System.out.println("=============Middle lines, starting from column 10 =============");
-                for (LineContent lineContent : lineContents) {
-                    System.out.println(lineContent.getVisibleContent());
-                }
-
-                lineContents = reader.readSpecificLines(LINE_STATISTICS.subList(LINE_STATISTICS.size() - 10, LINE_STATISTICS.size()), new ViewerSettings(ROWS, COLUMNS, LINE_STATISTICS.size() - 10, 0));
-                System.out.println("=============Last lines=============");
-                for (LineContent lineContent : lineContents) {
-                    System.out.println(lineContent.getVisibleContent());
-                }
-            }
-        } catch (IOException ioException) {
-            throw new UncheckedIOException("Unable to read file '" + fileName + "': " + ioException.getClass().getSimpleName(), ioException);
-        }
-
-        System.out.println("File " + fileName + " contained " + LINE_STATISTICS.size() + " lines with " + LINE_STATISTICS.stream().mapToLong(LineStatistics::getLengthInBytes).sum() + " characters (excluding new line characters)");
     }
 
 }

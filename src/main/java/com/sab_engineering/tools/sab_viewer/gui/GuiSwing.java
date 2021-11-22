@@ -5,7 +5,7 @@ import com.sab_engineering.tools.sab_viewer.controller.ScannerState;
 import com.sab_engineering.tools.sab_viewer.controller.ViewerContent;
 import com.sab_engineering.tools.sab_viewer.controller.ViewerController;
 import com.sab_engineering.tools.sab_viewer.controller.ViewerUiListener;
-import com.sab_engineering.tools.sab_viewer.io.LineContent;
+import com.sab_engineering.tools.sab_viewer.io.LinePreview;
 
 import javax.swing.*;
 import java.awt.*;
@@ -17,6 +17,7 @@ import java.awt.event.KeyEvent;
 import java.awt.event.WindowEvent;
 import java.beans.PropertyChangeListener;
 import java.io.File;
+import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.Optional;
 
@@ -90,19 +91,19 @@ public class GuiSwing {
 
         Optional<ViewerUiListener> oldUiListener = uiListener;
         uiListenerStartTimeStamp = System.currentTimeMillis();
-        uiListener = Optional.of(new ViewerController(fileToOpen.getPath(), numberOfLinesToDisplay, numberOfColumnsToDisplay, this::updateLines, this::updateState, this::showMessageDialog));
+        uiListener = Optional.of(new ViewerController(fileToOpen.getPath(), StandardCharsets.UTF_8, numberOfLinesToDisplay, numberOfColumnsToDisplay, this::updateLines, this::updateState, this::showMessageDialog));
 
         oldUiListener.ifPresent(ViewerUiListener::interruptBackgroundThreads);
     }
 
-    private void setLines(final Collection<LineContent> lines) {
+    private void setLines(final Collection<LinePreview> lines) {
         boolean lineAppended = false;
         final StringBuilder text = new StringBuilder();
-        for (LineContent lineContent : lines) {
+        for (LinePreview linePreview : lines) {
             if (lineAppended) {
                 text.append("\n");
             }
-            text.append(lineContent.getVisibleContent());
+            text.append(linePreview.getVisibleContent());
             lineAppended = true;
         }
         textArea.setText(text.toString());
@@ -122,11 +123,7 @@ public class GuiSwing {
     private void updateState(ScannerState scannerState) {
         SwingUtilities.invokeLater(
                 () -> {
-                    String memoryUsage = String.format("RAM used: %4d / %4d MB (VM limit: %4d MB)", scannerState.getUsedMemory() / (1024 * 1024), scannerState.getTotalMemory() / (1024 * 1024), scannerState.getMaxMemory() / (1024 * 1024));
-                    if (scannerState.isOutOfMemory()) {
-                        memoryUsage += " Scanner ran out of memory!";
-                    }
-                    this.memoryStatus.setText(memoryUsage);
+                    this.memoryStatus.setText(String.format("RAM used: %4d / %4d MB (VM limit: %4d MB)", scannerState.getUsedMemory() / (1024 * 1024), scannerState.getTotalMemory() / (1024 * 1024), scannerState.getMaxMemory() / (1024 * 1024)));
 
                     String runningIndicator;
                     String readSpeed;
@@ -135,12 +132,8 @@ public class GuiSwing {
                         readSpeed = "";
                     } else {
                         runningIndicator = "+";
-                        if (! scannerState.isOutOfMemory()) {
-                            double timePassedInSeconds = (System.currentTimeMillis() - uiListenerStartTimeStamp) / 1000.0;
-                            readSpeed = String.format(" (%5.2f MB/s)", scannerState.getBytesScanned() / (1024 * 1024 * timePassedInSeconds));
-                        } else {
-                            readSpeed = "";
-                        }
+                        double timePassedInSeconds = (System.currentTimeMillis() - uiListenerStartTimeStamp) / 1000.0;
+                        readSpeed = String.format(" (%5.2f MB/s)", scannerState.getBytesScanned() / (1024 * 1024 * timePassedInSeconds));
                     }
                     this.scannerStatus.setText(" KB: " + scannerState.getBytesScanned() / 1024 + runningIndicator + readSpeed + "  Lines: " + scannerState.getLinesScanned() + runningIndicator + " ");
                 }
