@@ -1,18 +1,18 @@
 package com.sab_engineering.tools.sab_viewer.controller;
 
 import com.sab_engineering.tools.sab_viewer.io.IoConstants;
-import com.sab_engineering.tools.sab_viewer.io.LinePreview;
 import com.sab_engineering.tools.sab_viewer.io.LinePositionBatch;
+import com.sab_engineering.tools.sab_viewer.io.LinePreview;
 import com.sab_engineering.tools.sab_viewer.io.Reader;
 import com.sab_engineering.tools.sab_viewer.io.Scanner;
 
-import javax.swing.JOptionPane;
+import javax.swing.*;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.channels.ClosedByInterruptException;
 import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Semaphore;
@@ -137,7 +137,12 @@ public class ViewerController implements ViewerUiListener {
     }
 
     private void update() {
-        linePreviewsStillRelevant.set(false);
+        boolean wasRelevantBefore = linePreviewsStillRelevant.getAndSet(false);
+        if (wasRelevantBefore) {
+            synchronized (linePreviews_toBeAccessedSynchronized) {
+                linePreviews_toBeAccessedSynchronized.clear();
+            }
+        }
 
         ViewerSettings viewerSettingsAtStartOfUpdate;
         synchronized (currentViewerSettings_toBeAccessedSynchronized) {
