@@ -20,25 +20,29 @@ import java.io.File;
 import java.nio.charset.StandardCharsets;
 import java.util.Collection;
 import java.util.Optional;
+import java.util.function.Consumer;
 
 public class GuiSwing {
 
     public static final String AMK_GO_ONE_LINE_UP = "up";
     public static final String AMK_GO_ONE_LINE_DOWN = "down";
-    public static final String AMK_GO_ONE_PAGE_UP = "upPage";
-    public static final String AMK_GO_ONE_PAGE_DOWN = "downPage";
     public static final String AMK_GO_ONE_COLUMN_LEFT = "left";
     public static final String AMK_GO_ONE_COLUMN_RIGHT = "right";
-    public static final String AMK_GO_TO_LINE_BEGIN = "home";
-    public static final String AMK_GO_TO_LINE_END = "end";
-    public static final String AMK_GO_TO_FIST_LINE = "ctrl+home";
-    public static final String AMK_GO_TO_LAST_LINE = "ctrl+end";
+
+    public static final String AMK_GO_ONE_PAGE_UP = "upPage";
+    public static final String AMK_GO_ONE_PAGE_DOWN = "downPage";
+    public static final String AMK_GO_ONE_PAGE_LEFT = "go_one_page_left";
+    public static final String AMK_GO_ONE_PAGE_RIGHT = "go_one_page_right";
+
     public static final String AMK_LARGE_JUMP_UP = "ctrl+up";
     public static final String AMK_LARGE_JUMP_DOWN = "ctrl+down";
     public static final String AMK_LARGE_JUMP_LEFT = "ctrl+left";
     public static final String AMK_LARGE_JUMP_RIGHT = "ctrl+right";
-    public static final String AMK_GO_ONE_PAGE_LEFT = "go_one_page_left";
-    public static final String AMK_GO_ONE_PAGE_RIGHT = "go_one_page_right";
+
+    public static final String AMK_GO_TO_LINE_BEGIN = "home";
+    public static final String AMK_GO_TO_LINE_END = "end";
+    public static final String AMK_GO_TO_FIST_LINE = "ctrl+home";
+    public static final String AMK_GO_TO_LAST_LINE = "ctrl+end";
 
     private Optional<ViewerUiListener> uiListener;
     private long uiListenerStartTimeStamp;
@@ -227,6 +231,19 @@ public class GuiSwing {
         goToMenuItem.addActionListener(actionEvent -> onGoToPosition());
         navigateMenu.add(goToMenuItem);
 
+        navigateMenu.add(createMenuItem("Page Up", KeyStroke.getKeyStroke(KeyEvent.VK_UP, InputEvent.ALT_DOWN_MASK), ViewerUiListener::onGoOnePageUp));
+        navigateMenu.add(createMenuItem("Page Down", KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.ALT_DOWN_MASK), ViewerUiListener::onGoOnePageDown));
+        navigateMenu.add(createMenuItem("Page Left", KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, InputEvent.ALT_DOWN_MASK), ViewerUiListener::onGoOnePageLeft));
+        navigateMenu.add(createMenuItem("Page Right", KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, InputEvent.ALT_DOWN_MASK), ViewerUiListener::onGoOnePageRight));
+
+        navigateMenu.add(createMenuItem("Large Jump Up", KeyStroke.getKeyStroke(KeyEvent.VK_UP, InputEvent.CTRL_DOWN_MASK), ViewerUiListener::onLargeJumpUp));
+        navigateMenu.add(createMenuItem("Large Jump Down", KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.CTRL_DOWN_MASK), ViewerUiListener::onLargeJumpDown));
+        navigateMenu.add(createMenuItem("Large Jump Left", KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, InputEvent.CTRL_DOWN_MASK), ViewerUiListener::onLargeJumpLeft));
+        navigateMenu.add(createMenuItem("Large Jump Right", KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, InputEvent.CTRL_DOWN_MASK), ViewerUiListener::onLargeJumpRight));
+
+        navigateMenu.add(createMenuItem("Go To First Line in File", KeyStroke.getKeyStroke(KeyEvent.VK_HOME, InputEvent.CTRL_DOWN_MASK), ViewerUiListener::onGoToFirstLine));
+        navigateMenu.add(createMenuItem("Go To Last Line in File", KeyStroke.getKeyStroke(KeyEvent.VK_END, InputEvent.CTRL_DOWN_MASK), ViewerUiListener::onGoToLastLine));
+
         // Help
         final JMenu helpMenu = new JMenu("Help");
         menuBar.add(helpMenu);
@@ -236,6 +253,13 @@ public class GuiSwing {
         helpMenu.add(aboutMenuItem);
 
         return menuBar;
+    }
+
+    private JMenuItem createMenuItem(String text, KeyStroke keyStroke, Consumer<ViewerUiListener> action) {
+        final JMenuItem menuItem = new JMenuItem(text);
+        menuItem.setAccelerator(keyStroke);
+        menuItem.addActionListener(actionEvent -> uiListener.ifPresent(action));
+        return menuItem;
     }
 
     private void onOpenFile() {
@@ -285,119 +309,54 @@ public class GuiSwing {
     private void prepareInputMapOfTextArea(final JTextArea textArea) {
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, 0), AMK_GO_ONE_LINE_UP);
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0), AMK_GO_ONE_LINE_DOWN);
-        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_UP, 0), AMK_GO_ONE_PAGE_UP);
-        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_DOWN, 0), AMK_GO_ONE_PAGE_DOWN);
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0), AMK_GO_ONE_COLUMN_LEFT);
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), AMK_GO_ONE_COLUMN_RIGHT);
-        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_HOME, 0), AMK_GO_TO_LINE_BEGIN);
-        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_END, 0), AMK_GO_TO_LINE_END);
-        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_HOME, InputEvent.CTRL_DOWN_MASK), AMK_GO_TO_FIST_LINE);
-        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_END, InputEvent.CTRL_DOWN_MASK), AMK_GO_TO_LAST_LINE);
+
+        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_UP, 0), AMK_GO_ONE_PAGE_UP);
+        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, InputEvent.ALT_DOWN_MASK), AMK_GO_ONE_PAGE_UP);
+        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_DOWN, 0), AMK_GO_ONE_PAGE_DOWN);
+        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.ALT_DOWN_MASK), AMK_GO_ONE_PAGE_DOWN);
+        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, InputEvent.ALT_DOWN_MASK), AMK_GO_ONE_PAGE_LEFT);
+        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, InputEvent.ALT_DOWN_MASK), AMK_GO_ONE_PAGE_RIGHT);
+
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, InputEvent.CTRL_DOWN_MASK), AMK_LARGE_JUMP_UP);
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.CTRL_DOWN_MASK), AMK_LARGE_JUMP_DOWN);
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, InputEvent.CTRL_DOWN_MASK), AMK_LARGE_JUMP_LEFT);
         textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, InputEvent.CTRL_DOWN_MASK), AMK_LARGE_JUMP_RIGHT);
-        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_UP, InputEvent.ALT_DOWN_MASK), AMK_GO_ONE_PAGE_UP);
-        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.ALT_DOWN_MASK), AMK_GO_ONE_PAGE_DOWN);
-        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, InputEvent.ALT_DOWN_MASK), AMK_GO_ONE_PAGE_LEFT);
-        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, InputEvent.ALT_DOWN_MASK), AMK_GO_ONE_PAGE_RIGHT);
+
+        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_HOME, InputEvent.CTRL_DOWN_MASK), AMK_GO_TO_FIST_LINE);
+        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_END, InputEvent.CTRL_DOWN_MASK), AMK_GO_TO_LAST_LINE);
+        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_HOME, 0), AMK_GO_TO_LINE_BEGIN);
+        textArea.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_END, 0), AMK_GO_TO_LINE_END);
     }
 
     private void prepareActionMapOfTextArea(final JTextArea textArea) {
-        textArea.getActionMap().put(AMK_GO_ONE_LINE_UP, new ActionStub() {
+        addToActionMap(textArea, AMK_GO_ONE_LINE_UP, ViewerUiListener::onGoOneLineUp);
+        addToActionMap(textArea, AMK_GO_ONE_LINE_DOWN, ViewerUiListener::onGoOneLineDown);
+        addToActionMap(textArea, AMK_GO_ONE_COLUMN_LEFT, ViewerUiListener::onGoOneColumnLeft);
+        addToActionMap(textArea, AMK_GO_ONE_COLUMN_RIGHT, ViewerUiListener::onGoOneColumnRight);
+
+        addToActionMap(textArea, AMK_GO_ONE_PAGE_UP, ViewerUiListener::onGoOnePageUp);
+        addToActionMap(textArea, AMK_GO_ONE_PAGE_DOWN, ViewerUiListener::onGoOnePageDown);
+        addToActionMap(textArea, AMK_GO_ONE_PAGE_LEFT, ViewerUiListener::onGoOnePageLeft);
+        addToActionMap(textArea, AMK_GO_ONE_PAGE_RIGHT, ViewerUiListener::onGoOnePageRight);
+
+        addToActionMap(textArea, AMK_LARGE_JUMP_UP, ViewerUiListener::onLargeJumpUp);
+        addToActionMap(textArea, AMK_LARGE_JUMP_DOWN, ViewerUiListener::onLargeJumpDown);
+        addToActionMap(textArea, AMK_LARGE_JUMP_LEFT, ViewerUiListener::onLargeJumpLeft);
+        addToActionMap(textArea, AMK_LARGE_JUMP_RIGHT, ViewerUiListener::onLargeJumpRight);
+
+        addToActionMap(textArea, AMK_GO_TO_FIST_LINE, ViewerUiListener::onGoToFirstLine);
+        addToActionMap(textArea, AMK_GO_TO_LAST_LINE, ViewerUiListener::onGoToLastLine);
+        addToActionMap(textArea, AMK_GO_TO_LINE_BEGIN, ViewerUiListener::onGoToLineBegin);
+        addToActionMap(textArea, AMK_GO_TO_LINE_END, ViewerUiListener::onGoToLineEnd);
+    }
+
+    private void addToActionMap(JTextArea textArea, String actionMapKey, Consumer<ViewerUiListener> action) {
+        textArea.getActionMap().put(actionMapKey, new ActionStub() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(ViewerUiListener::onGoOneLineUp);
-            }
-        });
-        textArea.getActionMap().put(AMK_GO_ONE_PAGE_UP, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(ViewerUiListener::onGoOnePageUp);
-            }
-        });
-        textArea.getActionMap().put(AMK_GO_ONE_LINE_DOWN, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(ViewerUiListener::onGoOneLineDown);
-            }
-        });
-        textArea.getActionMap().put(AMK_GO_ONE_PAGE_DOWN, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(ViewerUiListener::onGoOnePageDown);
-            }
-        });
-        textArea.getActionMap().put(AMK_GO_ONE_COLUMN_LEFT, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(ViewerUiListener::onGoOneColumnLeft);
-            }
-        });
-        textArea.getActionMap().put(AMK_GO_ONE_COLUMN_RIGHT, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(ViewerUiListener::onGoOneColumnRight);
-            }
-        });
-        textArea.getActionMap().put(AMK_GO_TO_LINE_BEGIN, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(ViewerUiListener::onGoToLineBegin);
-            }
-        });
-        textArea.getActionMap().put(AMK_GO_TO_LINE_END, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(ViewerUiListener::onGoToLineEnd);
-            }
-        });
-        textArea.getActionMap().put(AMK_GO_TO_FIST_LINE, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(ViewerUiListener::onGoToFirstLine);
-            }
-        });
-        textArea.getActionMap().put(AMK_GO_TO_LAST_LINE, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(ViewerUiListener::onGoToLastLine);
-            }
-        });
-        textArea.getActionMap().put(AMK_LARGE_JUMP_UP, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(ViewerUiListener::onLargeJumpUp);
-            }
-        });
-        textArea.getActionMap().put(AMK_LARGE_JUMP_DOWN, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(ViewerUiListener::onLargeJumpDown);
-            }
-        });
-        textArea.getActionMap().put(AMK_LARGE_JUMP_LEFT, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(ViewerUiListener::onLargeJumpLeft);
-            }
-        });
-        textArea.getActionMap().put(AMK_LARGE_JUMP_RIGHT, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(ViewerUiListener::onLargeJumpRight);
-            }
-        });
-        textArea.getActionMap().put(AMK_GO_ONE_PAGE_LEFT, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(ViewerUiListener::onGoOnePageLeft);
-            }
-        });
-        textArea.getActionMap().put(AMK_GO_ONE_PAGE_RIGHT, new ActionStub() {
-            @Override
-            public void actionPerformed(ActionEvent e) {
-                uiListener.ifPresent(ViewerUiListener::onGoOnePageRight);
+                uiListener.ifPresent(action);
             }
         });
     }
