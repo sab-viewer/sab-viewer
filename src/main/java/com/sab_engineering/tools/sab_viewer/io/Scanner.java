@@ -23,6 +23,8 @@ public class Scanner {
     private final int numberOfVisibleCharactersPerLine;
     private final Consumer<LinePositionBatch> statisticsListener;
 
+    int numberOfMemoryRetries;
+
     private final ByteBuffer readBuffer;
     private final CharBuffer opportunisticDecodeBuffer;
     private final CharBuffer fallbackDecodeBuffer;
@@ -47,6 +49,8 @@ public class Scanner {
         this.numberOfVisibleCharactersPerLine = numberCharactersForLinePreview;
         this.statisticsListener = statisticsListener;
 
+        this.numberOfMemoryRetries = 10;
+
         this.readBuffer = ByteBuffer.allocate(IoConstants.NUMBER_OF_BYTES_TO_READ_IN_SCANNER);
         this.opportunisticDecodeBuffer = CharBuffer.allocate(IoConstants.NUMBER_OF_BYTES_TO_DECODE_OPPORTUNISTICALLY);
         this.fallbackDecodeBuffer = CharBuffer.allocate(1);
@@ -59,7 +63,7 @@ public class Scanner {
         this.numberOfLinePreviewsPublished = 0;
     }
 
-    public void scanFile() throws IOException {
+    public boolean scanFile() throws IOException, InterruptedException {
         try (SeekableByteChannel seekableByteChannel = Files.newByteChannel(Paths.get(fileName), StandardOpenOption.READ)) {
             long positionInBytes = 0;
             long positionInBytesToStartOpportunisticEncoding = 0;
@@ -130,6 +134,21 @@ public class Scanner {
                                         if (numberOfLinesRead < numberOfPreviewLines && charactersInCurrentLine <= numberOfVisibleCharactersPerLine) {
                                             publishLinePreview((int) charactersInCurrentLine);
                                         }
+
+                                        Runtime runtime = Runtime.getRuntime();
+                                        if (runtime.totalMemory() * 2 > runtime.maxMemory() && runtime.freeMemory() < (250 * 1024 * 1024) && runtime.freeMemory() * 8 < runtime.totalMemory()) {
+                                            if (numberOfMemoryRetries > 0) {
+                                                numberOfMemoryRetries -= 1;
+
+                                                runtime.gc();
+
+                                                //noinspection BusyWait
+                                                Thread.sleep(250); // wait a bit to give gc some time to run, then publish final statistics
+                                            } else {
+                                                return true;
+                                            }
+                                        }
+
                                         finishLine(characterPositionEveryNCharactersInBytes, lineEndPositionInBytes, charactersInCurrentLine);
                                     }
                                     characterPositionEveryNCharactersInBytes.clear();
@@ -164,6 +183,8 @@ public class Scanner {
 
             publishStatistics();
         }
+
+        return false;
     }
 
     private void finishLine(final ArrayList<Long> characterPositionEveryNCharactersInBytes, long endPositionInBytes, long lengthInCharacters) {

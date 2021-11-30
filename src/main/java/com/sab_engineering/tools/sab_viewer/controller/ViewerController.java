@@ -119,7 +119,7 @@ public class ViewerController implements ViewerUiListener {
     private void scanFile(final int initiallyDisplayedLines, final int initiallyDisplayedColumns) {
         try {
             Scanner scanner = new Scanner(fileName, charset, lineContent -> addInitialContent(lineContent, contentConsumer), initiallyDisplayedLines, initiallyDisplayedColumns, this::updatePositions);
-            scanner.scanFile();
+            boolean stoppedBecauseOom = scanner.scanFile();
 
             System.gc();
 
@@ -130,7 +130,7 @@ public class ViewerController implements ViewerUiListener {
             long totalMemory = runtime.totalMemory();
             long maxMemory = runtime.maxMemory();
             int linesScanned = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
-            stateConsumer.accept(new ScannerState(linesScanned, linePositions_toBeAccessedSynchronized.getBytePositionOfEndOfLastLine(), true, usedMemory, totalMemory, maxMemory));
+            stateConsumer.accept(new ScannerState(linesScanned, linePositions_toBeAccessedSynchronized.getBytePositionOfEndOfLastLine(), true, stoppedBecauseOom, usedMemory, totalMemory, maxMemory));
         } catch (InterruptedException|ClosedByInterruptException interruptedException) {
             linePreviewsStillRelevant.set(false);
             // scannerThread should end. Nothing more to do.
@@ -230,7 +230,7 @@ public class ViewerController implements ViewerUiListener {
             long usedMemory = runtime.totalMemory() - runtime.freeMemory();
             long totalMemory = runtime.totalMemory();
             long maxMemory = runtime.maxMemory();
-            stateConsumer.accept(new ScannerState(numberOfLines, bytesScanned, false, usedMemory, totalMemory, maxMemory));
+            stateConsumer.accept(new ScannerState(numberOfLines, bytesScanned, false, false, usedMemory, totalMemory, maxMemory));
             stateConsumer_lastUpdatedAtBytes = bytesScanned;
         }
     }

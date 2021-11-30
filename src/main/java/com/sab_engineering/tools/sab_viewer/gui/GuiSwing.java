@@ -131,12 +131,19 @@ public class GuiSwing {
     private void updateState(ScannerState scannerState) {
         SwingUtilities.invokeLater(
                 () -> {
-                    this.memoryStatus.setText(String.format("RAM used: %4d / %4d MB (VM limit: %4d MB)", scannerState.getUsedMemory() / (1024 * 1024), scannerState.getTotalMemory() / (1024 * 1024), scannerState.getMaxMemory() / (1024 * 1024)));
+                    String memoryUsage = String.format("RAM used: %4d / %4d MB (VM limit: %4d MB)", scannerState.getUsedMemory() / (1024 * 1024), scannerState.getTotalMemory() / (1024 * 1024), scannerState.getMaxMemory() / (1024 * 1024));
+                    if (scannerState.isStoppedBecauseOom()) {
+                        memoryUsage += " - scanner is out of memory";
+                    }
+                    this.memoryStatus.setText(memoryUsage);
 
                     String runningIndicator;
                     String readSpeed;
                     if (scannerState.isFinished()) {
                         runningIndicator = "";
+                        if (scannerState.isStoppedBecauseOom()) {
+                            runningIndicator = "+?";
+                        }
                         readSpeed = "";
                     } else {
                         runningIndicator = "+";
