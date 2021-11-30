@@ -29,9 +29,11 @@ public interface ViewerUiListener {
     void onLargeJumpDown();
     void onLargeJumpLeft();
     void onLargeJumpRight();
-    void onGoTo(final int line, final int column);
+    void onGoTo(final int line, final long column);
 
     void resize(final int displayedLines, final int displayedColumns);
+
+    void moveToLocationOfSearchTerm(String literalSearchTerm);
 
     void interruptBackgroundThreads();
 }

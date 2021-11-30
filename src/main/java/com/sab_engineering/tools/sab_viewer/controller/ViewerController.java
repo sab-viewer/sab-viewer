@@ -1,10 +1,11 @@
 package com.sab_engineering.tools.sab_viewer.controller;
 
-import com.sab_engineering.tools.sab_viewer.io.IoConstants;
 import com.sab_engineering.tools.sab_viewer.io.LinePositionBatch;
+import com.sab_engineering.tools.sab_viewer.io.LinePositions;
 import com.sab_engineering.tools.sab_viewer.io.LinePreview;
 import com.sab_engineering.tools.sab_viewer.io.Reader;
 import com.sab_engineering.tools.sab_viewer.io.Scanner;
+import com.sab_engineering.tools.sab_viewer.io.Searcher;
 
 import javax.swing.*;
 import java.io.IOException;
@@ -12,7 +13,6 @@ import java.io.UncheckedIOException;
 import java.nio.channels.ClosedByInterruptException;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Semaphore;
@@ -31,8 +31,7 @@ public class ViewerController implements ViewerUiListener {
     private final AtomicBoolean linePreviewsStillRelevant;
     private final List<LinePreview> linePreviews_toBeAccessedSynchronized;
 
-    private final List<LinePositionBatch> linePositionBatch_toBeAccessedSynchronized;
-    private LinePositionBatch lastLinePositionBatch;
+    private final LinePositions linePositions_toBeAccessedSynchronized;
 
     private final Consumer<ViewerContent> contentConsumer;
     private final Consumer<ScannerState> stateConsumer;
@@ -46,11 +45,14 @@ public class ViewerController implements ViewerUiListener {
     private final Semaphore readerSignal; // <= this semaphore is used in 'reverse'. The reader waits/blocks on 'acquire' waiting for somebody to call 'release'. This avoids busy waits (in our code)
     private final Thread readerThread;
 
+    private final Semaphore searchLock;
+    private Thread searcherThread_toBeAccessedLocked;
+
     public ViewerController(final String fileName, Charset charset, final int initiallyDisplayedLines, final int initiallyDisplayedColumns, final Consumer<ViewerContent> contentConsumer, final Consumer<ScannerState> stateConsumer, final Consumer<MessageInfo> messageConsumer) {
         linePreviewsStillRelevant = new AtomicBoolean(true);
         linePreviews_toBeAccessedSynchronized = new ArrayList<>(initiallyDisplayedLines);
-        linePositionBatch_toBeAccessedSynchronized = new ArrayList<>(1024);
-        lastLinePositionBatch = null;
+
+        linePositions_toBeAccessedSynchronized = new LinePositions();
 
         this.fileName = fileName;
         this.charset = charset;
@@ -70,12 +72,27 @@ public class ViewerController implements ViewerUiListener {
         readerSignal.acquireUninterruptibly();
         readerThread = new Thread(this::readFile, "Reader");
         readerThread.start();
+
+        searchLock = new Semaphore(1);
+        searcherThread_toBeAccessedLocked = null;
     }
 
     @Override
     public void interruptBackgroundThreads() {
         scannerThread.interrupt();
         readerThread.interrupt();
+        try {
+            searchLock.acquire();
+            try {
+                if (searcherThread_toBeAccessedLocked != null) {
+                    searcherThread_toBeAccessedLocked.interrupt();
+                }
+            } finally {
+                searchLock.release();
+            }
+        } catch (InterruptedException e) {
+            // don't care
+        }
     }
 
     @Override
@@ -101,7 +118,7 @@ public class ViewerController implements ViewerUiListener {
     // this method is supposed to be executed in scannerThread
     private void scanFile(final int initiallyDisplayedLines, final int initiallyDisplayedColumns) {
         try {
-            Scanner scanner = new Scanner(fileName, charset, lineContent -> addInitialContent(lineContent, contentConsumer), initiallyDisplayedLines, initiallyDisplayedColumns, this::updateStatistics);
+            Scanner scanner = new Scanner(fileName, charset, lineContent -> addInitialContent(lineContent, contentConsumer), initiallyDisplayedLines, initiallyDisplayedColumns, this::updatePositions);
             scanner.scanFile();
 
             System.gc();
@@ -112,9 +129,8 @@ public class ViewerController implements ViewerUiListener {
             long usedMemory = runtime.totalMemory() - runtime.freeMemory();
             long totalMemory = runtime.totalMemory();
             long maxMemory = runtime.maxMemory();
-            int linesScanned = getNumberOfAllLinePositions_toBeAccessedSynchronized();
-            int lastLineIndexInBatch = lastLinePositionBatch.getNumberOfContainedLines() -1;
-            stateConsumer.accept(new ScannerState(linesScanned, lastLinePositionBatch.getCharacterPositionsInBytes(lastLineIndexInBatch)[0] + lastLinePositionBatch.getLengthInBytes(lastLineIndexInBatch), true, usedMemory, totalMemory, maxMemory));
+            int linesScanned = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
+            stateConsumer.accept(new ScannerState(linesScanned, linePositions_toBeAccessedSynchronized.getBytePositionOfEndOfLastLine(), true, usedMemory, totalMemory, maxMemory));
         } catch (InterruptedException|ClosedByInterruptException interruptedException) {
             linePreviewsStillRelevant.set(false);
             // scannerThread should end. Nothing more to do.
@@ -150,19 +166,17 @@ public class ViewerController implements ViewerUiListener {
         }
 
         int oneAfterLastLineIndex;
-        List<LinePositionBatch> relevantLineBatches;
-        synchronized (linePositionBatch_toBeAccessedSynchronized) {
-            if (linePositionBatch_toBeAccessedSynchronized.isEmpty()) {
+        LinePositions.LinePositionsView relevantLinePositions;
+        synchronized (linePositions_toBeAccessedSynchronized) {
+            if (linePositions_toBeAccessedSynchronized.isEmpty()) {
                 return;
             }
-            int linesScanned = getNumberOfAllLinePositions_toBeAccessedSynchronized();
+            int linesScanned = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
             if (viewerSettingsAtStartOfUpdate.getFirstDisplayedLineIndex() >= linesScanned) {
                 viewerSettingsAtStartOfUpdate.setFirstDisplayedLineIndex(linesScanned - 1);
             }
             oneAfterLastLineIndex = Math.min(linesScanned, viewerSettingsAtStartOfUpdate.getFirstDisplayedLineIndex() + viewerSettingsAtStartOfUpdate.getDisplayedLines());
-            int indexOfFirstBatch = viewerSettingsAtStartOfUpdate.getFirstDisplayedLineIndex() / IoConstants.NUMBER_OF_LINES_PER_BATCH;
-            int indexOfLastBatch = Math.min(1 + (oneAfterLastLineIndex / IoConstants.NUMBER_OF_LINES_PER_BATCH), linePositionBatch_toBeAccessedSynchronized.size());
-            relevantLineBatches = new ArrayList<>(linePositionBatch_toBeAccessedSynchronized.subList(indexOfFirstBatch, indexOfLastBatch));
+            relevantLinePositions = linePositions_toBeAccessedSynchronized.subPositions(viewerSettingsAtStartOfUpdate.getFirstDisplayedLineIndex(), oneAfterLastLineIndex);
         }
 
         final List<LinePreview> linePreviews;
@@ -170,9 +184,7 @@ public class ViewerController implements ViewerUiListener {
             if (reader == null) {
                 reader = new Reader(fileName, charset);
             }
-            int startIndexInBatch = viewerSettingsAtStartOfUpdate.getFirstDisplayedLineIndex() % IoConstants.NUMBER_OF_LINES_PER_BATCH;
-            int offsetOfStartIndexInBatch = viewerSettingsAtStartOfUpdate.getFirstDisplayedLineIndex() - startIndexInBatch;
-            linePreviews = reader.readSpecificLines(relevantLineBatches, startIndexInBatch, oneAfterLastLineIndex - offsetOfStartIndexInBatch, viewerSettingsAtStartOfUpdate);
+            linePreviews = reader.readSpecificLines(relevantLinePositions, viewerSettingsAtStartOfUpdate.getFirstDisplayedLineIndex(), oneAfterLastLineIndex, viewerSettingsAtStartOfUpdate);
         } catch (IOException ioException) {
             throw displayAndCreateException(ioException, "read");
         }
@@ -205,14 +217,14 @@ public class ViewerController implements ViewerUiListener {
         }
     }
 
-    private void updateStatistics(final LinePositionBatch statistics) {
+    private void updatePositions(final LinePositionBatch positionBatch) {
         int numberOfLines;
-        synchronized (linePositionBatch_toBeAccessedSynchronized) {
-            lastLinePositionBatch = statistics;
-            linePositionBatch_toBeAccessedSynchronized.add(statistics);
-            numberOfLines = getNumberOfAllLinePositions_toBeAccessedSynchronized();
+        long bytesScanned;
+        synchronized (linePositions_toBeAccessedSynchronized) {
+            linePositions_toBeAccessedSynchronized.add(positionBatch);
+            numberOfLines = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
+            bytesScanned = linePositions_toBeAccessedSynchronized.getBytePositionOfEndOfLastLine();
         }
-        long bytesScanned = statistics.getCharacterPositionsInBytes(lastLinePositionBatch.getNumberOfContainedLines() - 1)[0] + statistics.getLengthInBytes(lastLinePositionBatch.getNumberOfContainedLines() - 1);
         if ((numberOfLines < 250 && numberOfLines % 10 == 0) || stateConsumer_lastUpdatedAtBytes / (1024 * 1024) != bytesScanned / (1024 * 1024)) {
             Runtime runtime = Runtime.getRuntime();
             long usedMemory = runtime.totalMemory() - runtime.freeMemory();
@@ -223,14 +235,10 @@ public class ViewerController implements ViewerUiListener {
         }
     }
 
-    private int getNumberOfAllLinePositions_toBeAccessedSynchronized() {
-        return ((linePositionBatch_toBeAccessedSynchronized.size() - 1) * IoConstants.NUMBER_OF_LINES_PER_BATCH) + lastLinePositionBatch.getNumberOfContainedLines();
-    }
-
     private void moveVertical(final int lineOffset) {
         int linesScanned;
-        synchronized (linePositionBatch_toBeAccessedSynchronized) {
-            linesScanned = getNumberOfAllLinePositions_toBeAccessedSynchronized();
+        synchronized (linePositions_toBeAccessedSynchronized) {
+            linesScanned = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
         }
         synchronized (currentViewerSettings_toBeAccessedSynchronized) {
             int newFirstLineIndex = Math.max(Math.min(currentViewerSettings_toBeAccessedSynchronized.getFirstDisplayedLineIndex() + lineOffset, linesScanned - 1), 0);
@@ -248,8 +256,8 @@ public class ViewerController implements ViewerUiListener {
 
     private void moveToVerticalPosition(final int firstDisplayedLineIndex) {
         int linesScanned;
-        synchronized (linePositionBatch_toBeAccessedSynchronized) {
-            linesScanned = getNumberOfAllLinePositions_toBeAccessedSynchronized();
+        synchronized (linePositions_toBeAccessedSynchronized) {
+            linesScanned = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
         }
         int newFirstLineIndex = Math.max(Math.min(firstDisplayedLineIndex, linesScanned - 1), 0);
         synchronized (currentViewerSettings_toBeAccessedSynchronized) {
@@ -267,8 +275,8 @@ public class ViewerController implements ViewerUiListener {
 
     private void moveToPosition(final int firstDisplayedLineIndex, final long firstDisplayedColumnIndex) {
         int linesScanned;
-        synchronized (linePositionBatch_toBeAccessedSynchronized) {
-            linesScanned = getNumberOfAllLinePositions_toBeAccessedSynchronized();
+        synchronized (linePositions_toBeAccessedSynchronized) {
+            linesScanned = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
         }
         int newFirstLineIndex = Math.max(Math.min(firstDisplayedLineIndex, linesScanned - 1), 0);
         synchronized (currentViewerSettings_toBeAccessedSynchronized) {
@@ -351,14 +359,14 @@ public class ViewerController implements ViewerUiListener {
         synchronized (currentViewerSettings_toBeAccessedSynchronized) {
             viewerSettings = new ViewerSettings(currentViewerSettings_toBeAccessedSynchronized);
         }
-        LinePositionBatch statisticOfCurrentLine = null;
-        synchronized (linePositionBatch_toBeAccessedSynchronized) {
-            if (viewerSettings.getFirstDisplayedLineIndex() > getNumberOfAllLinePositions_toBeAccessedSynchronized()) {
-                statisticOfCurrentLine = ViewerController.this.linePositionBatch_toBeAccessedSynchronized.get(viewerSettings.getFirstDisplayedLineIndex() / IoConstants.NUMBER_OF_LINES_PER_BATCH);
+        long lengthOfCurrentLineInCharacters = -1;
+        synchronized (linePositions_toBeAccessedSynchronized) {
+            if (viewerSettings.getFirstDisplayedLineIndex() < linePositions_toBeAccessedSynchronized.getNumberOfContainedLines()) {
+                lengthOfCurrentLineInCharacters = linePositions_toBeAccessedSynchronized.getLengthInCharacters(viewerSettings.getFirstDisplayedLineIndex());
             }
         }
-        if (statisticOfCurrentLine != null) {
-            moveToHorizontalPosition(statisticOfCurrentLine.getLengthInCharacters(viewerSettings.getFirstDisplayedLineIndex() % IoConstants.NUMBER_OF_LINES_PER_BATCH) - viewerSettings.getDisplayedColumns());
+        if (lengthOfCurrentLineInCharacters != -1) {
+            moveToHorizontalPosition(lengthOfCurrentLineInCharacters - viewerSettings.getDisplayedColumns());
         }
     }
 
@@ -375,15 +383,15 @@ public class ViewerController implements ViewerUiListener {
         }
 
         int line;
-        synchronized (linePositionBatch_toBeAccessedSynchronized) {
-            line = Math.max(0, getNumberOfAllLinePositions_toBeAccessedSynchronized() - viewerSettings.getDisplayedLines());
+        synchronized (linePositions_toBeAccessedSynchronized) {
+            line = Math.max(0, linePositions_toBeAccessedSynchronized.getNumberOfContainedLines() - viewerSettings.getDisplayedLines());
         }
 
         moveToVerticalPosition(line);
     }
 
     @Override
-    public void onGoTo(int firstDisplayedLineIndex, int firstDisplayedColumnIndex) {
+    public void onGoTo(int firstDisplayedLineIndex, long firstDisplayedColumnIndex) {
         moveToPosition(firstDisplayedLineIndex, firstDisplayedColumnIndex);
     }
 
@@ -405,5 +413,57 @@ public class ViewerController implements ViewerUiListener {
     @Override
     public void onLargeJumpRight() {
         moveHorizontal(largeColumnsJump);
+    }
+
+    @Override
+    public void moveToLocationOfSearchTerm(String literalSearchTerm) {
+        if (literalSearchTerm.length() == 0) {
+            messageConsumer.accept(new MessageInfo("Unable to search file", "Search term is empty", JOptionPane.WARNING_MESSAGE));
+            return;
+        }
+
+        try {
+            searchLock.acquire();
+
+            try {
+                if (searcherThread_toBeAccessedLocked != null) {
+                    if (searcherThread_toBeAccessedLocked.isAlive()) {
+                        searcherThread_toBeAccessedLocked.interrupt();
+                    }
+                    searcherThread_toBeAccessedLocked = null;
+                }
+                ViewerSettings viewerSettingsAtStartOfSearch;
+                synchronized (currentViewerSettings_toBeAccessedSynchronized) {
+                    viewerSettingsAtStartOfSearch = new ViewerSettings(currentViewerSettings_toBeAccessedSynchronized);
+                }
+
+                LinePositions.LinePositionsView linePositions;
+                synchronized (linePositions_toBeAccessedSynchronized) {
+                    linePositions = linePositions_toBeAccessedSynchronized.asView();
+                }
+
+                searcherThread_toBeAccessedLocked = new Thread(() -> searchForTerm(literalSearchTerm, viewerSettingsAtStartOfSearch, linePositions), "Searcher");
+                searcherThread_toBeAccessedLocked.start();
+            } finally {
+                searchLock.release();
+            }
+        } catch (InterruptedException e) {
+            // stop waiting for searchLock
+        }
+    }
+
+    // supposed to be run in searcher thread
+    private void searchForTerm(String literalSearchTerm, ViewerSettings viewerSettingsAtStartOfSearch, LinePositions.LinePositionsView linePositions) {
+        try {
+            Searcher searcher = new Searcher(fileName, charset);
+            boolean foundTerm = searcher.searchInSpecificLines(literalSearchTerm, linePositions, viewerSettingsAtStartOfSearch, this::moveToPosition, true);
+            if (!foundTerm) {
+                messageConsumer.accept(new MessageInfo("File search done", "Could not locate term between current position and end of file", JOptionPane.INFORMATION_MESSAGE));
+            }
+        } catch (ClosedByInterruptException interruptedException) {
+            // searcherThread should end. Nothing more to do.
+        } catch (IOException ioException) {
+            throw displayAndCreateException(ioException, "search");
+        }
     }
 }

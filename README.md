@@ -4,7 +4,7 @@ This project is aimed to develop a viewer for large text files.
 It should open and be usable quickly, even when opening text files that are multiple GBs in size.
 
 ## TODO ##
-* support simple search (jump to next, done in separate thread, can be canceled, if takes long).
+* improve simple search (allow to cancel, select result, navigate with result in the middle instead of in top left corner).
 * handle tabs (\t) correctly in fixed width views (count them as multiple characters 
   - there is corresponding setting in JTextArea).
 * Add settings dialog (some settings are listed below).

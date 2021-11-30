@@ -59,6 +59,8 @@ public class GuiSwing {
     private JLabel memoryStatus;
     private JLabel scannerStatus;
 
+    private String lastSearchTerm;
+
     public GuiSwing(final Optional<String> maybeFilePath) {
         uiListener = Optional.empty();
         directoryFromSelection = null;
@@ -84,6 +86,8 @@ public class GuiSwing {
                     maybeFilePath.ifPresent(this::openFile);
                 }
         );
+
+        lastSearchTerm = null;
     }
 
     public void openFile(final String filePath) {
@@ -210,17 +214,19 @@ public class GuiSwing {
         fileMenu.addSeparator();
         fileMenu.add(exitMenuItem);
 
-        // Edit
-        final JMenu editMenu = new JMenu("Edit");
-        menuBar.add(editMenu);
+        // Search
+        final JMenu searchMenu = new JMenu("Search");
+        menuBar.add(searchMenu);
 
-        final JMenuItem findMenuItem = new JMenuItem("Find");
-        // TODO
-        editMenu.add(findMenuItem);
+        final JMenuItem findMenuItem = new JMenuItem("Find...");
+        findMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK));
+        findMenuItem.addActionListener(actionEvent -> onFind());
+        searchMenu.add(findMenuItem);
 
-        final JMenuItem settingsMenuItem = new JMenuItem("Settings...");
-        // TODO
-        editMenu.add(settingsMenuItem);
+        final JMenuItem findNextMenuItem = new JMenuItem("Find next");
+        findNextMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_G, InputEvent.CTRL_DOWN_MASK));
+        findNextMenuItem.addActionListener(actionEvent -> onFindNext());
+        searchMenu.add(findNextMenuItem);
 
         // Navigate
         final JMenu navigateMenu = new JMenu("Navigate");
@@ -243,6 +249,14 @@ public class GuiSwing {
 
         navigateMenu.add(createMenuItem("Go To First Line in File", KeyStroke.getKeyStroke(KeyEvent.VK_HOME, InputEvent.CTRL_DOWN_MASK), ViewerUiListener::onGoToFirstLine));
         navigateMenu.add(createMenuItem("Go To Last Line in File", KeyStroke.getKeyStroke(KeyEvent.VK_END, InputEvent.CTRL_DOWN_MASK), ViewerUiListener::onGoToLastLine));
+
+        // Edit
+        final JMenu editMenu = new JMenu("Edit");
+        menuBar.add(editMenu);
+
+        final JMenuItem settingsMenuItem = new JMenuItem("Settings...");
+        // TODO
+        editMenu.add(settingsMenuItem);
 
         // Help
         final JMenu helpMenu = new JMenu("Help");
@@ -268,6 +282,27 @@ public class GuiSwing {
         if (result == JFileChooser.APPROVE_OPTION) {
             final File selectedFile = fileChooser.getSelectedFile();
             openFile(selectedFile);
+        }
+    }
+
+    private void onFind() {
+        lastSearchTerm = (String)JOptionPane.showInputDialog(
+                frame,
+                "Enter Search Term",
+                "Find",
+                JOptionPane.QUESTION_MESSAGE,
+                null,
+                null,
+                ""
+        );
+        if (lastSearchTerm != null) {
+            handleFind(lastSearchTerm);
+        }
+    }
+
+    private void onFindNext() {
+        if (lastSearchTerm != null) {
+            handleFind(lastSearchTerm);
         }
     }
 
@@ -361,6 +396,10 @@ public class GuiSwing {
         });
     }
 
+    private void handleFind(String result) {
+        uiListener.ifPresent(viewerUiListener -> viewerUiListener.moveToLocationOfSearchTerm(result));
+    }
+
     private void handleGoTo(String result) {
         if (!uiListener.isPresent()) {
             return;
@@ -370,7 +409,7 @@ public class GuiSwing {
             if (address.length == 2) {
                 if (address[0].matches("^\\d+$") && address[1].matches("^\\d+$")) {
                     int line = Integer.parseInt(address[0]) - 1;
-                    int column = Integer.parseInt(address[1]) - 1;
+                    long column = Long.parseLong(address[1]) - 1;
                     uiListener.get().onGoTo(line, column);
 
                     return;

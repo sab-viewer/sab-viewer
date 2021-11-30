@@ -22,7 +22,7 @@ public class Reader implements Closeable {
         seekableByteChannel = Files.newByteChannel(Paths.get(fileName), StandardOpenOption.READ);
     }
 
-    public List<LinePreview> readSpecificLines(List<LinePositionBatch> orderedLinePositionBatches, int startIndexInBatch, int endIndexInBatch, ViewerSettings viewerSettings) throws IOException {
+    public List<LinePreview> readSpecificLines(LinePositions.LinePositionsView linePositions, int indexOfFirstLineToRead, int oneAfterLastLineIndex, ViewerSettings viewerSettings) throws IOException {
         long startTimestamp = System.currentTimeMillis();
         long offsetFromBeginningOfLineInCharacters = viewerSettings.getFirstDisplayedColumnIndex();
         int numberOfVisibleCharactersPerLine = viewerSettings.getDisplayedColumns();
@@ -31,26 +31,21 @@ public class Reader implements Closeable {
             throw new IllegalStateException("Negative offsets are not supported: " + offsetFromBeginningOfLineInCharacters);
         }
 
-        List<LinePreview> resultingLines = new ArrayList<>(endIndexInBatch - startIndexInBatch);
-        for (int lineIndexInBatches = startIndexInBatch; lineIndexInBatches < endIndexInBatch; lineIndexInBatches++) {
-            int batchIndex = lineIndexInBatches / IoConstants.NUMBER_OF_LINES_PER_BATCH;
-            LinePositionBatch linePositionBatch = orderedLinePositionBatches.get(batchIndex);
-
-            int lineIndexInBatch = lineIndexInBatches % IoConstants.NUMBER_OF_LINES_PER_BATCH;
-
-            if (offsetFromBeginningOfLineInCharacters >= linePositionBatch.getLengthInCharacters(lineIndexInBatch)) {
+        List<LinePreview> resultingLines = new ArrayList<>(oneAfterLastLineIndex - indexOfFirstLineToRead);
+        for (int lineIndex = indexOfFirstLineToRead; lineIndex < oneAfterLastLineIndex; lineIndex++) {
+            if (offsetFromBeginningOfLineInCharacters >= linePositions.getLengthInCharacters(lineIndex)) {
                 resultingLines.add(new LinePreview(""));
             } else {
-                int charactersToRead = (int) Math.min(numberOfVisibleCharactersPerLine, linePositionBatch.getLengthInCharacters(lineIndexInBatch) - offsetFromBeginningOfLineInCharacters);
+                int charactersToRead = (int) Math.min(numberOfVisibleCharactersPerLine, linePositions.getLengthInCharacters(lineIndex) - offsetFromBeginningOfLineInCharacters);
                 int characterMultipleToStartReading = (int) (offsetFromBeginningOfLineInCharacters / IoConstants.NUMBER_OF_CHARACTERS_PER_BYTE_POSITION);
                 int characterMultipleToStopReading = 1 + (int) ((offsetFromBeginningOfLineInCharacters + charactersToRead) / IoConstants.NUMBER_OF_CHARACTERS_PER_BYTE_POSITION);
 
-                long positionToStartReadingInBytes = linePositionBatch.getCharacterPositionsInBytes(lineIndexInBatch)[characterMultipleToStartReading];
+                long positionToStartReadingInBytes = linePositions.getCharacterPositionsInBytes(lineIndex)[characterMultipleToStartReading];
                 long positionToStopReadingInBytes;
-                if (characterMultipleToStopReading < linePositionBatch.getCharacterPositionsInBytes(lineIndexInBatch).length) {
-                    positionToStopReadingInBytes = linePositionBatch.getCharacterPositionsInBytes(lineIndexInBatch)[characterMultipleToStopReading];
+                if (characterMultipleToStopReading < linePositions.getCharacterPositionsInBytes(lineIndex).length) {
+                    positionToStopReadingInBytes = linePositions.getCharacterPositionsInBytes(lineIndex)[characterMultipleToStopReading];
                 } else {
-                    positionToStopReadingInBytes = linePositionBatch.getCharacterPositionsInBytes(lineIndexInBatch)[0] + linePositionBatch.getLengthInBytes(lineIndexInBatch);
+                    positionToStopReadingInBytes = linePositions.getCharacterPositionsInBytes(lineIndex)[0] + linePositions.getLengthInBytes(lineIndex);
                 }
                 int bytesToRead = (int) (positionToStopReadingInBytes - positionToStartReadingInBytes);
 
