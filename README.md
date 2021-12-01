@@ -28,3 +28,5 @@ It should open and be usable quickly, even when opening text files that are mult
 * (Settings) Do we need to persist any settings? Working dir, look-and-feel something else?
 * test with very long lines (GB long)
 * Test with very large files. Probably ~100Gb
+* Add maven profiles to build with newer java versions (just trying to use JDK newer than 1.8 leads to errors for now).
+* Fix maven warnings - I believe there were some
