@@ -5,47 +5,97 @@ import java.util.List;
 
 public class LinePositions {
     private final List<LinePositionBatch> linePositionBatches;
-    private LinePositionBatch lastLinePositionBatch;
+    private MutableLinePositionBatch lastLinePositionBatch;
+    private MutableLinePositionBatch lastLinePositionPreviewBatchReference;
 
     public LinePositions() {
         linePositionBatches = new ArrayList<>(1024);
         lastLinePositionBatch = null;
+        lastLinePositionPreviewBatchReference = null;
     }
 
     public void add(LinePositionBatch positionBatch) {
-        lastLinePositionBatch = positionBatch;
-        linePositionBatches.add(lastLinePositionBatch);
+        linePositionBatches.add(positionBatch);
+        lastLinePositionBatch = null;
+        lastLinePositionPreviewBatchReference = null;
+    }
+
+    public void updateLastBatch(MutableLinePositionBatch positionBatch) {
+        if (positionBatch != this.lastLinePositionPreviewBatchReference) {
+            lastLinePositionPreviewBatchReference = positionBatch;
+            lastLinePositionBatch = new MutableLinePositionBatch(positionBatch);
+        }
+        for (int i = lastLinePositionBatch.getNumberOfContainedLines(); i < positionBatch.getNumberOfContainedLines(); i++) {
+            lastLinePositionBatch.setCharacterPositionsInBytes(i, positionBatch.getCharacterPositionsInBytes(i));
+            lastLinePositionBatch.setLengthInBytes(i, positionBatch.getLengthInBytes(i));
+            lastLinePositionBatch.setLengthInCharacters(i, positionBatch.getLengthInCharacters(i));
+            lastLinePositionBatch.setNumberOfContainedLines(lastLinePositionBatch.getNumberOfContainedLines() + 1);
+        }
     }
 
     public boolean isEmpty() {
-        return linePositionBatches.isEmpty();
+        return linePositionBatches.isEmpty() && (lastLinePositionBatch == null || lastLinePositionBatch.getNumberOfContainedLines() == 0);
     }
 
     public long[] getCharacterPositionsInBytes(int lineIndex) {
-        LinePositionBatch linePositionBatch = linePositionBatches.get(lineIndex / IoConstants.NUMBER_OF_LINES_PER_BATCH);
+        int index = lineIndex / IoConstants.NUMBER_OF_LINES_PER_BATCH;
+
+        LinePositionBatch linePositionBatch;
+        if (index == linePositionBatches.size()) {
+            linePositionBatch = lastLinePositionBatch;
+        } else {
+            linePositionBatch = linePositionBatches.get(index);
+        }
         return linePositionBatch.getCharacterPositionsInBytes(lineIndex % IoConstants.NUMBER_OF_LINES_PER_BATCH);
     }
 
     public long getLengthInBytes(int lineIndex) {
-        LinePositionBatch linePositionBatch = linePositionBatches.get(lineIndex / IoConstants.NUMBER_OF_LINES_PER_BATCH);
+        int index = lineIndex / IoConstants.NUMBER_OF_LINES_PER_BATCH;
+
+        LinePositionBatch linePositionBatch;
+        if (index == linePositionBatches.size()) {
+            linePositionBatch = lastLinePositionBatch;
+        } else {
+            linePositionBatch = linePositionBatches.get(index);
+        }
         return linePositionBatch.getLengthInBytes(lineIndex % IoConstants.NUMBER_OF_LINES_PER_BATCH);
     }
 
     public long getLengthInCharacters(int lineIndex) {
-        LinePositionBatch linePositionBatch = linePositionBatches.get(lineIndex / IoConstants.NUMBER_OF_LINES_PER_BATCH);
+        int index = lineIndex / IoConstants.NUMBER_OF_LINES_PER_BATCH;
+
+        LinePositionBatch linePositionBatch;
+        if (index == linePositionBatches.size()) {
+            linePositionBatch = lastLinePositionBatch;
+        } else {
+            linePositionBatch = linePositionBatches.get(index);
+        }
         return linePositionBatch.getLengthInCharacters(lineIndex % IoConstants.NUMBER_OF_LINES_PER_BATCH);
     }
 
     public long getBytePositionOfEndOfLastLine() {
-        if (lastLinePositionBatch == null) {
+        LinePositionBatch linePositionBatch;
+        if (lastLinePositionBatch != null) {
+            linePositionBatch = lastLinePositionBatch;
+        } else if (linePositionBatches.size() > 0){
+            linePositionBatch = linePositionBatches.get(linePositionBatches.size() - 1);
+        } else {
             return 0;
         }
-        int lastLineIndexInBatch = lastLinePositionBatch.getNumberOfContainedLines() -1;
-        return lastLinePositionBatch.getCharacterPositionsInBytes(lastLineIndexInBatch)[0] + lastLinePositionBatch.getLengthInBytes(lastLineIndexInBatch);
+        int lastLineIndexInBatch = linePositionBatch.getNumberOfContainedLines() -1;
+        return linePositionBatch.getCharacterPositionsInBytes(lastLineIndexInBatch)[0] + linePositionBatch.getLengthInBytes(lastLineIndexInBatch);
     }
 
     public int getNumberOfContainedLines() {
-        return ((linePositionBatches.size() - 1) * IoConstants.NUMBER_OF_LINES_PER_BATCH) + lastLinePositionBatch.getNumberOfContainedLines();
+        if (lastLinePositionBatch != null) {
+            int linesInFinishedBatches = linePositionBatches.size() * IoConstants.NUMBER_OF_LINES_PER_BATCH;
+            return linesInFinishedBatches + lastLinePositionBatch.getNumberOfContainedLines();
+        } else if (linePositionBatches.size() > 0) {
+            int linesInFinishedBatches = (linePositionBatches.size() - 1) * IoConstants.NUMBER_OF_LINES_PER_BATCH;
+            return linesInFinishedBatches + linePositionBatches.get(linePositionBatches.size() - 1).numberOfContainedLines;
+        } else {
+            return 0;
+        }
     }
 
     public LinePositionsView asView() {

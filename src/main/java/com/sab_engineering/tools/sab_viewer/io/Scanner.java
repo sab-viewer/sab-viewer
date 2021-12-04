@@ -22,6 +22,7 @@ public class Scanner {
     private final int numberOfPreviewLines;
     private final int numberOfVisibleCharactersPerLine;
     private final Consumer<LinePositionBatch> statisticsListener;
+    private final Consumer<MutableLinePositionBatch> statisticsPreviewListener;
 
     int numberOfMemoryRetries;
 
@@ -31,15 +32,12 @@ public class Scanner {
 
     private int numberOfLinesRead;
 
-    private long[][] statisticsBatch_characterPositionsInBytes;
-    private long[] statisticsBatch_lengthInBytes;
-    private long[] statisticsBatch_lengthInCharacters;
-    private int statisticsBatch_numberOfContainedLines;
+    private MutableLinePositionBatch mutableLinePositionBatch;
 
     private final char[] linePreviewBuffer;
     private int numberOfLinePreviewsPublished;
 
-    public Scanner(String fileName, Charset charset, Consumer<LinePreview> linePreviewListener, int numberOfPreviewLines, int numberCharactersForLinePreview, Consumer<LinePositionBatch> statisticsListener) {
+    public Scanner(String fileName, Charset charset, Consumer<LinePreview> linePreviewListener, int numberOfPreviewLines, int numberCharactersForLinePreview, Consumer<LinePositionBatch> statisticsListener, Consumer<MutableLinePositionBatch> statisticsPreviewListener) {
         this.fileName = fileName;
         this.charsetDecoder = charset.newDecoder();
         this.charsetDecoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
@@ -48,6 +46,7 @@ public class Scanner {
         this.numberOfPreviewLines = numberOfPreviewLines;
         this.numberOfVisibleCharactersPerLine = numberCharactersForLinePreview;
         this.statisticsListener = statisticsListener;
+        this.statisticsPreviewListener = statisticsPreviewListener;
 
         this.numberOfMemoryRetries = 10;
 
@@ -190,21 +189,30 @@ public class Scanner {
     private void finishLine(final ArrayList<Long> characterPositionEveryNCharactersInBytes, long endPositionInBytes, long lengthInCharacters) {
         final long[] characterPositionsInBytes = characterPositionEveryNCharactersInBytes.stream().mapToLong(Long::longValue).toArray();
 
-        this.statisticsBatch_characterPositionsInBytes[this.statisticsBatch_numberOfContainedLines] = characterPositionsInBytes;
-        this.statisticsBatch_lengthInBytes[this.statisticsBatch_numberOfContainedLines] = endPositionInBytes - characterPositionsInBytes[0];
-        this.statisticsBatch_lengthInCharacters[this.statisticsBatch_numberOfContainedLines] = lengthInCharacters;
-        this.statisticsBatch_numberOfContainedLines++;
+        int numberOfContainedLines = this.mutableLinePositionBatch.getNumberOfContainedLines();
+        this.mutableLinePositionBatch.setCharacterPositionsInBytes(numberOfContainedLines, characterPositionsInBytes);
+        this.mutableLinePositionBatch.setLengthInBytes(numberOfContainedLines, endPositionInBytes - characterPositionsInBytes[0]);
+        this.mutableLinePositionBatch.setLengthInCharacters(numberOfContainedLines, lengthInCharacters);
+        this.mutableLinePositionBatch.setNumberOfContainedLines(numberOfContainedLines + 1);
 
-        if (this.statisticsBatch_numberOfContainedLines == IoConstants.NUMBER_OF_LINES_PER_BATCH) {
+        if (mutableLinePositionBatch.getNumberOfContainedLines() == IoConstants.NUMBER_OF_LINES_PER_BATCH) {
             publishStatistics();
             initStatisticsBatch();
+        } else if (numberOfLinesRead < IoConstants.NUMBER_OF_LINES_TO_PREVIEW_BATCH){
+            publishStatisticsPreview();
         }
         numberOfLinesRead++;
     }
 
+    private void publishStatisticsPreview() {
+        if (this.mutableLinePositionBatch.getNumberOfContainedLines() > 0) {
+            statisticsPreviewListener.accept(this.mutableLinePositionBatch);
+        }
+    }
+
     private void publishStatistics() {
-        if (this.statisticsBatch_numberOfContainedLines > 0) {
-            statisticsListener.accept(new LinePositionBatch(this.statisticsBatch_characterPositionsInBytes, this.statisticsBatch_lengthInBytes, this.statisticsBatch_lengthInCharacters, this.statisticsBatch_numberOfContainedLines));
+        if (this.mutableLinePositionBatch.getNumberOfContainedLines() > 0) {
+            statisticsListener.accept(new LinePositionBatch(this.mutableLinePositionBatch));
         }
     }
 
@@ -218,9 +226,9 @@ public class Scanner {
     }
 
     private void initStatisticsBatch() {
-        this.statisticsBatch_characterPositionsInBytes = new long[IoConstants.NUMBER_OF_LINES_PER_BATCH][];
-        this.statisticsBatch_lengthInBytes = new long[IoConstants.NUMBER_OF_LINES_PER_BATCH];
-        this.statisticsBatch_lengthInCharacters = new long[IoConstants.NUMBER_OF_LINES_PER_BATCH];
-        this.statisticsBatch_numberOfContainedLines = 0;
+        long[][] statisticsBatch_characterPositionsInBytes = new long[IoConstants.NUMBER_OF_LINES_PER_BATCH][];
+        long[] statisticsBatch_lengthInBytes = new long[IoConstants.NUMBER_OF_LINES_PER_BATCH];
+        long[] statisticsBatch_lengthInCharacters = new long[IoConstants.NUMBER_OF_LINES_PER_BATCH];
+        this.mutableLinePositionBatch = new MutableLinePositionBatch(statisticsBatch_characterPositionsInBytes, statisticsBatch_lengthInBytes, statisticsBatch_lengthInCharacters, 0);
     }
 }

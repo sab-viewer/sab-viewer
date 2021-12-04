@@ -3,6 +3,7 @@ package com.sab_engineering.tools.sab_viewer.controller;
 import com.sab_engineering.tools.sab_viewer.io.LinePositionBatch;
 import com.sab_engineering.tools.sab_viewer.io.LinePositions;
 import com.sab_engineering.tools.sab_viewer.io.LinePreview;
+import com.sab_engineering.tools.sab_viewer.io.MutableLinePositionBatch;
 import com.sab_engineering.tools.sab_viewer.io.Reader;
 import com.sab_engineering.tools.sab_viewer.io.Scanner;
 import com.sab_engineering.tools.sab_viewer.io.Searcher;
@@ -118,7 +119,7 @@ public class ViewerController implements ViewerUiListener {
     // this method is supposed to be executed in scannerThread
     private void scanFile(final int initiallyDisplayedLines, final int initiallyDisplayedColumns) {
         try {
-            Scanner scanner = new Scanner(fileName, charset, lineContent -> addInitialContent(lineContent, contentConsumer), initiallyDisplayedLines, initiallyDisplayedColumns, this::updatePositions);
+            Scanner scanner = new Scanner(fileName, charset, lineContent -> addInitialContent(lineContent, contentConsumer), initiallyDisplayedLines, initiallyDisplayedColumns, this::updatePositions, this::updateLastPositionBatch);
             boolean stoppedBecauseOom = scanner.scanFile();
 
             System.gc();
@@ -225,7 +226,25 @@ public class ViewerController implements ViewerUiListener {
             numberOfLines = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
             bytesScanned = linePositions_toBeAccessedSynchronized.getBytePositionOfEndOfLastLine();
         }
-        if ((numberOfLines < 250 && numberOfLines % 10 == 0) || stateConsumer_lastUpdatedAtBytes / (1024 * 1024) != bytesScanned / (1024 * 1024)) {
+        if (stateConsumer_lastUpdatedAtBytes / (1024 * 1024) != bytesScanned / (1024 * 1024)) {
+            Runtime runtime = Runtime.getRuntime();
+            long usedMemory = runtime.totalMemory() - runtime.freeMemory();
+            long totalMemory = runtime.totalMemory();
+            long maxMemory = runtime.maxMemory();
+            stateConsumer.accept(new ScannerState(numberOfLines, bytesScanned, false, false, usedMemory, totalMemory, maxMemory));
+            stateConsumer_lastUpdatedAtBytes = bytesScanned;
+        }
+    }
+
+    private void updateLastPositionBatch(final MutableLinePositionBatch positionBatch) {
+        int numberOfLines;
+        long bytesScanned;
+        synchronized (linePositions_toBeAccessedSynchronized) {
+            linePositions_toBeAccessedSynchronized.updateLastBatch(positionBatch);
+            numberOfLines = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
+            bytesScanned = linePositions_toBeAccessedSynchronized.getBytePositionOfEndOfLastLine();
+        }
+        if (numberOfLines < 250 && numberOfLines % 10 == 0) {
             Runtime runtime = Runtime.getRuntime();
             long usedMemory = runtime.totalMemory() - runtime.freeMemory();
             long totalMemory = runtime.totalMemory();
@@ -240,18 +259,31 @@ public class ViewerController implements ViewerUiListener {
         synchronized (linePositions_toBeAccessedSynchronized) {
             linesScanned = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
         }
+        boolean changed = false;
         synchronized (currentViewerSettings_toBeAccessedSynchronized) {
             int newFirstLineIndex = Math.max(Math.min(currentViewerSettings_toBeAccessedSynchronized.getFirstDisplayedLineIndex() + lineOffset, linesScanned - 1), 0);
-            currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedLineIndex(newFirstLineIndex);
+            if (newFirstLineIndex != currentViewerSettings_toBeAccessedSynchronized.getFirstDisplayedLineIndex()) {
+                currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedLineIndex(newFirstLineIndex);
+                changed = true;
+            }
         }
-        requestUpdate();
+        if (changed) {
+            requestUpdate();
+        }
     }
 
     private void moveHorizontal(final long columnOffset) {
+        boolean changed = false;
         synchronized (currentViewerSettings_toBeAccessedSynchronized) {
-            currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedColumnIndex(Math.max(currentViewerSettings_toBeAccessedSynchronized.getFirstDisplayedColumnIndex() + columnOffset, 0));
+            long newColumnIndex = Math.max(currentViewerSettings_toBeAccessedSynchronized.getFirstDisplayedColumnIndex() + columnOffset, 0);
+            if (newColumnIndex != currentViewerSettings_toBeAccessedSynchronized.getFirstDisplayedColumnIndex()) {
+                currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedColumnIndex(newColumnIndex);
+                changed = true;
+            }
         }
-        requestUpdate();
+        if (changed) {
+            requestUpdate();
+        }
     }
 
     private void moveToVerticalPosition(final int firstDisplayedLineIndex) {
@@ -260,17 +292,30 @@ public class ViewerController implements ViewerUiListener {
             linesScanned = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
         }
         int newFirstLineIndex = Math.max(Math.min(firstDisplayedLineIndex, linesScanned - 1), 0);
+        boolean changed = false;
         synchronized (currentViewerSettings_toBeAccessedSynchronized) {
-            currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedLineIndex(newFirstLineIndex);
+            if (newFirstLineIndex != currentViewerSettings_toBeAccessedSynchronized.getFirstDisplayedLineIndex()) {
+                currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedLineIndex(newFirstLineIndex);
+                changed = true;
+            }
         }
-        requestUpdate();
+        if (changed) {
+            requestUpdate();
+        }
     }
 
     private void moveToHorizontalPosition(final long firstDisplayedColumnIndex) {
+        boolean changed = false;
         synchronized (currentViewerSettings_toBeAccessedSynchronized) {
-            currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedColumnIndex(Math.max(firstDisplayedColumnIndex, 0));
+            long newColumnIndex = Math.max(firstDisplayedColumnIndex, 0);
+            if (newColumnIndex != currentViewerSettings_toBeAccessedSynchronized.getFirstDisplayedColumnIndex()) {
+                currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedColumnIndex(newColumnIndex);
+                changed = true;
+            }
         }
-        requestUpdate();
+        if (changed) {
+            requestUpdate();
+        }
     }
 
     private void moveToPosition(final int firstDisplayedLineIndex, final long firstDisplayedColumnIndex) {
@@ -279,11 +324,21 @@ public class ViewerController implements ViewerUiListener {
             linesScanned = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
         }
         int newFirstLineIndex = Math.max(Math.min(firstDisplayedLineIndex, linesScanned - 1), 0);
+        long newColumnIndex = Math.max(firstDisplayedColumnIndex, 0);
+        boolean changed = false;
         synchronized (currentViewerSettings_toBeAccessedSynchronized) {
-            currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedLineIndex(newFirstLineIndex);
-            currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedColumnIndex(Math.max(firstDisplayedColumnIndex, 0));
+            if (
+                    newFirstLineIndex != currentViewerSettings_toBeAccessedSynchronized.getFirstDisplayedLineIndex()
+                    || newColumnIndex != currentViewerSettings_toBeAccessedSynchronized.getFirstDisplayedColumnIndex()
+            ) {
+                currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedLineIndex(newFirstLineIndex);
+                currentViewerSettings_toBeAccessedSynchronized.setFirstDisplayedColumnIndex(newColumnIndex);
+                changed = true;
+            }
         }
-        requestUpdate();
+        if (changed) {
+            requestUpdate();
+        }
     }
 
     private UncheckedIOException displayAndCreateException(IOException exception, String verb)  {
