@@ -14,23 +14,25 @@ public class LinePositions {
         lastLinePositionPreviewBatchReference = null;
     }
 
-    public void add(LinePositionBatch positionBatch) {
+    public void addFinishedBatch(LinePositionBatch positionBatch) {
         linePositionBatches.add(positionBatch);
         lastLinePositionBatch = null;
         lastLinePositionPreviewBatchReference = null;
     }
 
-    public void updateLastBatch(MutableLinePositionBatch positionBatch) {
-        if (positionBatch != this.lastLinePositionPreviewBatchReference) {
-            lastLinePositionPreviewBatchReference = positionBatch;
-            lastLinePositionBatch = new MutableLinePositionBatch(positionBatch);
+    public void updateLastBatchPreview(MutableLinePositionBatch positionBatchPreview) {
+        if (positionBatchPreview != this.lastLinePositionPreviewBatchReference) {
+            lastLinePositionPreviewBatchReference = positionBatchPreview;
+            lastLinePositionBatch = new MutableLinePositionBatch(positionBatchPreview);
         }
-        for (int i = lastLinePositionBatch.getNumberOfContainedLines(); i < positionBatch.getNumberOfContainedLines(); i++) {
-            lastLinePositionBatch.setCharacterPositionsInBytes(i, positionBatch.getCharacterPositionsInBytes(i));
-            lastLinePositionBatch.setLengthInBytes(i, positionBatch.getLengthInBytes(i));
-            lastLinePositionBatch.setLengthInCharacters(i, positionBatch.getLengthInCharacters(i));
-            lastLinePositionBatch.setNumberOfContainedLines(lastLinePositionBatch.getNumberOfContainedLines() + 1);
+        int numberOfLinesInPreview = positionBatchPreview.getNumberOfContainedLines();
+        int startToCopy = Math.min(lastLinePositionBatch.getNumberOfContainedLines(), numberOfLinesInPreview - 1); // always update/copy last line, even if it is already there
+        for (int i = startToCopy; i < numberOfLinesInPreview; i++) {
+            lastLinePositionBatch.setCharacterPositionsInBytes(i, positionBatchPreview.getCharacterPositionsInBytes(i));
+            lastLinePositionBatch.setLengthInBytes(i, positionBatchPreview.getLengthInBytes(i));
+            lastLinePositionBatch.setLengthInCharacters(i, positionBatchPreview.getLengthInCharacters(i));
         }
+        lastLinePositionBatch.setNumberOfContainedLines(numberOfLinesInPreview);
     }
 
     public boolean isEmpty() {

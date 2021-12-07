@@ -150,7 +150,7 @@ public class GuiSwing {
                         double timePassedInSeconds = (System.currentTimeMillis() - uiListenerStartTimeStamp) / 1000.0;
                         readSpeed = String.format(" (%5.2f MB/s)", scannerState.getBytesScanned() / (1024 * 1024 * timePassedInSeconds));
                     }
-                    this.scannerStatus.setText(" KB: " + scannerState.getBytesScanned() / 1024 + runningIndicator + readSpeed + "  Lines: " + scannerState.getLinesScanned() + runningIndicator + " ");
+                    this.scannerStatus.setText(" KB: " + String.format("%,d", (scannerState.getBytesScanned() / 1024)) + runningIndicator + readSpeed + "  Lines: " + scannerState.getLinesScanned() + runningIndicator + " ");
                 }
         );
 

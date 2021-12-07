@@ -1,5 +1,6 @@
 package com.sab_engineering.tools.sab_viewer.controller;
 
+import com.sab_engineering.tools.sab_viewer.io.IoConstants;
 import com.sab_engineering.tools.sab_viewer.io.LinePositionBatch;
 import com.sab_engineering.tools.sab_viewer.io.LinePositions;
 import com.sab_engineering.tools.sab_viewer.io.LinePreview;
@@ -13,11 +14,9 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.channels.ClosedByInterruptException;
 import java.nio.charset.Charset;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Semaphore;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 public class ViewerController implements ViewerUiListener {
@@ -29,16 +28,13 @@ public class ViewerController implements ViewerUiListener {
     private final int largeLinesJump = 500; // TODO: Should be modifiable by user in settings
     private final int largeColumnsJump = 500;
 
-    private final AtomicBoolean linePreviewsStillRelevant;
-    private final List<LinePreview> linePreviews_toBeAccessedSynchronized;
-
     private final LinePositions linePositions_toBeAccessedSynchronized;
 
     private final Consumer<ViewerContent> contentConsumer;
     private final Consumer<ScannerState> stateConsumer;
     private final Consumer<MessageInfo> messageConsumer;
 
-    private long stateConsumer_lastUpdatedAtBytes;
+    private long stateConsumer_lastUpdatedAtTimeStampInMillis;
 
     private final Thread scannerThread;
 
@@ -50,23 +46,20 @@ public class ViewerController implements ViewerUiListener {
     private Thread searcherThread_toBeAccessedLocked;
 
     public ViewerController(final String fileName, Charset charset, final int initiallyDisplayedLines, final int initiallyDisplayedColumns, final Consumer<ViewerContent> contentConsumer, final Consumer<ScannerState> stateConsumer, final Consumer<MessageInfo> messageConsumer) {
-        linePreviewsStillRelevant = new AtomicBoolean(true);
-        linePreviews_toBeAccessedSynchronized = new ArrayList<>(initiallyDisplayedLines);
-
         linePositions_toBeAccessedSynchronized = new LinePositions();
 
         this.fileName = fileName;
         this.charset = charset;
 
-        this.currentViewerSettings_toBeAccessedSynchronized = new ViewerSettings(initiallyDisplayedLines, initiallyDisplayedColumns, 0, 0);
+        currentViewerSettings_toBeAccessedSynchronized = new ViewerSettings(initiallyDisplayedLines, initiallyDisplayedColumns, 0, 0);
 
         this.contentConsumer = contentConsumer;
         this.stateConsumer = stateConsumer;
         this.messageConsumer = messageConsumer;
 
-        this.stateConsumer_lastUpdatedAtBytes = 0;
+        stateConsumer_lastUpdatedAtTimeStampInMillis = System.currentTimeMillis();
 
-        scannerThread = new Thread(() -> scanFile(initiallyDisplayedLines, initiallyDisplayedColumns), "Scanner");
+        scannerThread = new Thread(this::scanFile, "Scanner");
         scannerThread.start();
 
         readerSignal = new Semaphore(1);
@@ -112,14 +105,10 @@ public class ViewerController implements ViewerUiListener {
         }
     }
 
-    private void requestUpdate(){
-        readerSignal.release();
-    }
-
     // this method is supposed to be executed in scannerThread
-    private void scanFile(final int initiallyDisplayedLines, final int initiallyDisplayedColumns) {
+    private void scanFile() {
         try {
-            Scanner scanner = new Scanner(fileName, charset, lineContent -> addInitialContent(lineContent, contentConsumer), initiallyDisplayedLines, initiallyDisplayedColumns, this::updatePositions, this::updateLastPositionBatch);
+            Scanner scanner = new Scanner(fileName, charset, this::processFinishedPositions, this::processPositionPreview);
             boolean stoppedBecauseOom = scanner.scanFile();
 
             System.gc();
@@ -133,10 +122,8 @@ public class ViewerController implements ViewerUiListener {
             int linesScanned = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
             stateConsumer.accept(new ScannerState(linesScanned, linePositions_toBeAccessedSynchronized.getBytePositionOfEndOfLastLine(), true, stoppedBecauseOom, usedMemory, totalMemory, maxMemory));
         } catch (InterruptedException|ClosedByInterruptException interruptedException) {
-            linePreviewsStillRelevant.set(false);
             // scannerThread should end. Nothing more to do.
         } catch (IOException ioException) {
-            linePreviewsStillRelevant.set(false);
             throw displayAndCreateException(ioException, "scan");
         }
     }
@@ -148,19 +135,16 @@ public class ViewerController implements ViewerUiListener {
                 readerSignal.acquire();
                 update();
             } while (true);
-        } catch (InterruptedException interruptedException) {
+        } catch (ClosedByInterruptException | InterruptedException interruptedException) {
             // readerThread should end. Nothing more to do.
         }
     }
 
-    private void update() {
-        boolean wasRelevantBefore = linePreviewsStillRelevant.getAndSet(false);
-        if (wasRelevantBefore) {
-            synchronized (linePreviews_toBeAccessedSynchronized) {
-                linePreviews_toBeAccessedSynchronized.clear();
-            }
-        }
+    private void requestUpdate(){
+        readerSignal.release();
+    }
 
+    private void update() throws ClosedByInterruptException {
         ViewerSettings viewerSettingsAtStartOfUpdate;
         synchronized (currentViewerSettings_toBeAccessedSynchronized) {
             viewerSettingsAtStartOfUpdate = new ViewerSettings(currentViewerSettings_toBeAccessedSynchronized);
@@ -186,6 +170,8 @@ public class ViewerController implements ViewerUiListener {
                 reader = new Reader(fileName, charset);
             }
             linePreviews = reader.readSpecificLines(relevantLinePositions, viewerSettingsAtStartOfUpdate.getFirstDisplayedLineIndex(), oneAfterLastLineIndex, viewerSettingsAtStartOfUpdate);
+        } catch(ClosedByInterruptException cbie) {
+            throw cbie;
         } catch (IOException ioException) {
             throw displayAndCreateException(ioException, "read");
         }
@@ -206,51 +192,74 @@ public class ViewerController implements ViewerUiListener {
         }
     }
 
-    private void addInitialContent(final LinePreview linePreview, final Consumer<ViewerContent> lineConsumer) {
-        if (linePreviewsStillRelevant.get()) {
-            synchronized (linePreviews_toBeAccessedSynchronized) {
-                linePreviews_toBeAccessedSynchronized.add(linePreview);
-                ArrayList<LinePreview> contents = new ArrayList<>(linePreviews_toBeAccessedSynchronized);
-                if (linePreviewsStillRelevant.get()) {
-                    lineConsumer.accept(new ViewerContent(contents, 1, 1));
+    private void processFinishedPositions(final LinePositionBatch positionBatch) {
+        int numberOfLines;
+        long bytesScanned;
+        synchronized (linePositions_toBeAccessedSynchronized) {
+            linePositions_toBeAccessedSynchronized.addFinishedBatch(positionBatch);
+            numberOfLines = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
+            bytesScanned = linePositions_toBeAccessedSynchronized.getBytePositionOfEndOfLastLine();
+        }
+        requestUpdateIfPositionsAreInRange(numberOfLines - positionBatch.getNumberOfContainedLines(), numberOfLines - 1, null);
+        publishState(numberOfLines, bytesScanned);
+    }
+
+    private void processPositionPreview(final MutableLinePositionBatch positionBatch) {
+        int numberOfLines;
+        long bytesScanned;
+        synchronized (linePositions_toBeAccessedSynchronized) {
+            linePositions_toBeAccessedSynchronized.updateLastBatchPreview(positionBatch);
+            numberOfLines = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
+            bytesScanned = linePositions_toBeAccessedSynchronized.getBytePositionOfEndOfLastLine();
+        }
+        requestUpdateIfPositionsAreInRange(numberOfLines - 1, numberOfLines - 1, positionBatch.getCharacterPositionsInBytes(positionBatch.getNumberOfContainedLines() - 1));
+        publishState(numberOfLines, bytesScanned);
+    }
+
+    private void requestUpdateIfPositionsAreInRange(int indexOfFirstLineInBatch, int indexOfLastLineInBatch, long[] characterPositionsInBytes) {
+        ViewerSettings viewerSettingsAtStartOfUpdate;
+        synchronized (currentViewerSettings_toBeAccessedSynchronized) {
+            viewerSettingsAtStartOfUpdate = new ViewerSettings(currentViewerSettings_toBeAccessedSynchronized);
+        }
+        int firstDisplayedLineIndex = viewerSettingsAtStartOfUpdate.getFirstDisplayedLineIndex();
+        int lastDisplayedLineIndex = firstDisplayedLineIndex + (viewerSettingsAtStartOfUpdate.getDisplayedLines() - 1);
+        if (
+                isInRangeInclusive(firstDisplayedLineIndex, indexOfFirstLineInBatch, indexOfLastLineInBatch)
+                || isInRangeInclusive(lastDisplayedLineIndex, indexOfFirstLineInBatch, indexOfLastLineInBatch)
+                || isInRangeInclusive(indexOfFirstLineInBatch, firstDisplayedLineIndex, lastDisplayedLineIndex)
+                || isInRangeInclusive(indexOfLastLineInBatch, firstDisplayedLineIndex, lastDisplayedLineIndex)
+        ) {
+            if (characterPositionsInBytes != null) {
+                long lastUpdatedCharacterIndex = characterPositionsInBytes.length * (long) IoConstants.NUMBER_OF_CHARACTERS_PER_BYTE_POSITION;
+                long firstUpdatedCharacterIndex = lastUpdatedCharacterIndex - IoConstants.NUMBER_OF_CHARACTERS_PER_BYTE_POSITION;
+                long firstDisplayedColumnIndex = viewerSettingsAtStartOfUpdate.getFirstDisplayedColumnIndex();
+                long lastDisplayedColumnIndex = firstDisplayedColumnIndex + (viewerSettingsAtStartOfUpdate.getDisplayedColumns() - 1);
+                if (
+                    isInRangeInclusive(firstDisplayedColumnIndex, firstUpdatedCharacterIndex, lastUpdatedCharacterIndex)
+                    || isInRangeInclusive(lastDisplayedColumnIndex, firstUpdatedCharacterIndex, lastUpdatedCharacterIndex)
+                    || isInRangeInclusive(firstUpdatedCharacterIndex, firstDisplayedColumnIndex, lastDisplayedColumnIndex)
+                    || isInRangeInclusive(lastUpdatedCharacterIndex, firstDisplayedColumnIndex, lastDisplayedColumnIndex)
+                ) {
+                    requestUpdate();
                 }
+            } else {
+                requestUpdate();
             }
         }
     }
 
-    private void updatePositions(final LinePositionBatch positionBatch) {
-        int numberOfLines;
-        long bytesScanned;
-        synchronized (linePositions_toBeAccessedSynchronized) {
-            linePositions_toBeAccessedSynchronized.add(positionBatch);
-            numberOfLines = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
-            bytesScanned = linePositions_toBeAccessedSynchronized.getBytePositionOfEndOfLastLine();
-        }
-        if (stateConsumer_lastUpdatedAtBytes / (1024 * 1024) != bytesScanned / (1024 * 1024)) {
-            Runtime runtime = Runtime.getRuntime();
-            long usedMemory = runtime.totalMemory() - runtime.freeMemory();
-            long totalMemory = runtime.totalMemory();
-            long maxMemory = runtime.maxMemory();
-            stateConsumer.accept(new ScannerState(numberOfLines, bytesScanned, false, false, usedMemory, totalMemory, maxMemory));
-            stateConsumer_lastUpdatedAtBytes = bytesScanned;
-        }
+    private boolean isInRangeInclusive(long needle, long lowerBound, long upperBound) {
+        return needle >= lowerBound && needle <= upperBound;
     }
 
-    private void updateLastPositionBatch(final MutableLinePositionBatch positionBatch) {
-        int numberOfLines;
-        long bytesScanned;
-        synchronized (linePositions_toBeAccessedSynchronized) {
-            linePositions_toBeAccessedSynchronized.updateLastBatch(positionBatch);
-            numberOfLines = linePositions_toBeAccessedSynchronized.getNumberOfContainedLines();
-            bytesScanned = linePositions_toBeAccessedSynchronized.getBytePositionOfEndOfLastLine();
-        }
-        if (numberOfLines < 250 && numberOfLines % 10 == 0) {
+    private void publishState(int numberOfLines, long bytesScanned) {
+        if (stateConsumer_lastUpdatedAtTimeStampInMillis / 500 != System.currentTimeMillis() / 500) {
             Runtime runtime = Runtime.getRuntime();
             long usedMemory = runtime.totalMemory() - runtime.freeMemory();
             long totalMemory = runtime.totalMemory();
             long maxMemory = runtime.maxMemory();
             stateConsumer.accept(new ScannerState(numberOfLines, bytesScanned, false, false, usedMemory, totalMemory, maxMemory));
-            stateConsumer_lastUpdatedAtBytes = bytesScanned;
+            stateConsumer_lastUpdatedAtTimeStampInMillis = System.currentTimeMillis();
         }
     }
 
