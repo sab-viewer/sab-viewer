@@ -231,7 +231,7 @@ public class GuiSwing {
         searchMenu.add(findMenuItem);
 
         final JMenuItem findNextMenuItem = new JMenuItem("Find next");
-        findNextMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_G, InputEvent.CTRL_DOWN_MASK));
+        findNextMenuItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK | InputEvent.SHIFT_DOWN_MASK));
         findNextMenuItem.addActionListener(actionEvent -> onFindNext());
         searchMenu.add(findNextMenuItem);
 
