@@ -110,6 +110,7 @@
                             <addDefaultImplementationEntries>true</addDefaultImplementationEntries>
                         </manifest>
                         <manifestEntries>
+                            <!--suppress MavenModelInspection -->
                             <Implementation-Build>${describe}</Implementation-Build>
                         </manifestEntries>
                     </archive>
