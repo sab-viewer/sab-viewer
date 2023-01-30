@@ -28,7 +28,7 @@ public class Searcher {
         this.charsetDecoder.onUnmappableCharacter(CodingErrorAction.REPLACE);
         this.charsetDecoder.onMalformedInput(CodingErrorAction.REPLACE);
 
-        this.readBuffer = ByteBuffer.allocate(IoConstants.NUMBER_OF_BYTES_TO_READ_IN_SCANNER);
+        this.readBuffer = ByteBuffer.allocate(IoConstants.NUMBER_OF_BYTES_TO_BUFFER_DURING_READ);
         this.decodeBuffer = CharBuffer.allocate(IoConstants.NUMBER_OF_BYTES_TO_DECODE_OPPORTUNISTICALLY);
     }
 

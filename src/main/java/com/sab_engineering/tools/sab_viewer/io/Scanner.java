@@ -41,7 +41,7 @@ public class Scanner {
 
         this.numberOfMemoryRetries = 10;
 
-        this.readBuffer = ByteBuffer.allocate(IoConstants.NUMBER_OF_BYTES_TO_READ_IN_SCANNER);
+        this.readBuffer = ByteBuffer.allocate(IoConstants.NUMBER_OF_BYTES_TO_BUFFER_DURING_READ);
         this.opportunisticDecodeBuffer = CharBuffer.allocate(IoConstants.NUMBER_OF_BYTES_TO_DECODE_OPPORTUNISTICALLY);
         this.fallbackDecodeBuffer = CharBuffer.allocate(1);
 
